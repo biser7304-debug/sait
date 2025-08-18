@@ -15,58 +15,58 @@ ini_set("display_errors","On");
 
 
 
-// Start the session if not already started
+// Запускаем сессию, если она еще не запущена
 // if (session_status() === PHP_SESSION_NONE) {
 //     session_start();
 // }
 
-// --- Kerberos Authentication & User Parsing ---
+// --- Аутентификация Kerberos и парсинг пользователя ---
 
-// For development/testing purposes, if PHP_AUTH_USER is not set by the server,
-// you can simulate it by uncommenting one of the lines below.
-// In a real production environment with Kerberos, this 'if' block can be removed.
+// В целях разработки/тестирования, если PHP_AUTH_USER не установлен сервером,
+// вы можете симулировать его, раскомментировав одну из строк ниже.
+// В реальной производственной среде с Kerberos этот блок 'if' можно удалить.
 // if (!isset($_SERVER['PHP_AUTH_USER'])) {
-//     // To test as admin:
+//     // Для тестирования как администратор:
 //     // $_SERVER['PHP_AUTH_USER'] = 'as-biserov@domain.com';
 // 
-//     // To test as a regular user (assuming this user will be added to the DB with department rights):
+//     // Для тестирования как обычный пользователь (предполагается, что этот пользователь будет добавлен в БД с правами департамента):
 //     // $_SERVER['PHP_AUTH_USER'] = 'testuser@domain.com';
 // 
-//     // To test as an unauthorized user:
+//     // Для тестирования как неавторизованный пользователь:
 //     // $_SERVER['PHP_AUTH_USER'] = 'unknown@domain.com';
 // 
-//     // If still not set, default to a known admin for development.
+//     // Если все еще не установлено, по умолчанию используем известного администратора для разработки.
 //     if (!isset($_SERVER['PHP_AUTH_USER'])) {
 //         $_SERVER['PHP_AUTH_USER'] = 'as-karpov@domain.com';
 //     }
 // }
 
-// Get the full username (e.g., login@domain) provided by the web server
+// Получаем полное имя пользователя (например, login@domain), предоставленное веб-сервером
 $kerberos_user = $_SERVER['PHP_AUTH_USER'] ?? null;
 
 if (empty($kerberos_user)) {
-    // This case should ideally be handled by the web server configuration (e.g., Apache's AuthType Kerberos),
-    // which shouldn't allow access to the script without authentication. This is a fallback.
+    // Этот случай в идеале должен обрабатываться конфигурацией веб-сервера (например, AuthType Kerberos в Apache),
+    // которая не должна разрешать доступ к скрипту без аутентификации. Это запасной вариант.
     header('HTTP/1.1 401 Unauthorized');
-    die('401 Unauthorized: Kerberos authentication is required to access this application.');
+    die('401 Не авторизован: для доступа к этому приложению требуется аутентификация Kerberos.');
 }
 
-// Parse the username to get the part before the '@' symbol
+// Парсим имя пользователя, чтобы получить часть перед символом '@'
 $username_parts = explode('@', $kerberos_user);
-$username = strtolower($username_parts[0]); // Use lowercase for consistency
+$username = strtolower($username_parts[0]); // Используем нижний регистр для единообразия
 
-// --- Authorization & Session Management ---
+// --- Авторизация и управление сессиями ---
 
-// Check if a session is already active and if the username matches.
-// This avoids hitting the database on every single page load for an already-authorized user.
+// Проверяем, активна ли уже сессия и совпадает ли имя пользователя.
+// Это позволяет избежать обращения к базе данных при каждой загрузке страницы для уже авторизованного пользователя.
 // if (isset($USER['loggedin']) && $USER['loggedin'] === true && isset($USER['username']) && $USER['username'] === $username) {
-//     // The user is already authenticated and authorized in this session.
+//     // Пользователь уже аутентифицирован и авторизован в этой сессии.
 //     return;
 // }
 
-// If there's no active session for this user, we must query the database to get their role.
-// This code will run only once per session.
-require_once __DIR__ . '/../config.php'; // Ensure the $pdo object is available
+// Если для этого пользователя нет активной сессии, мы должны запросить базу данных, чтобы получить его роль.
+// Этот код будет выполняться только один раз за сессию.
+require_once __DIR__ . '/../config.php'; // Убеждаемся, что объект $pdo доступен
 require_once 'functions.php';
 try {
     $stmt = $pdo->prepare("SELECT username, role, department_id FROM users WHERE username = :username");
@@ -74,8 +74,8 @@ try {
     $user_data = $stmt->fetch();
 
     if ($user_data) {
-        // User is found in our database. Authorize them by creating a session.
-        //session_regenerate_id(true); // Regenerate session ID to prevent session fixation attacks
+        // Пользователь найден в нашей базе данных. Авторизуем его, создав сессию.
+        //session_regenerate_id(true); // Регенерируем ID сессии для предотвращения атак фиксации сессии
 //  echo $_SERVER['PHP_AUTH_USER'] . " 6 username=" . $user_data['role'];
         $USER['loggedin'] = true;
         $USER['username'] = $user_data['username'];
@@ -83,18 +83,18 @@ try {
         $USER['department_id'] = $user_data['department_id'];
 
     } else {
-        // The user is authenticated via Kerberos, but is not registered in our application's database.
-        // Therefore, they are not authorized to use the application.
-//         session_destroy(); // Clean up any partial session
+        // Пользователь аутентифицирован через Kerberos, но не зарегистрирован в базе данных нашего приложения.
+        // Следовательно, он не авторизован для использования приложения.
+//         session_destroy(); // Очищаем любую частичную сессию
         header('HTTP/1.1 403 Forbidden');
-        die('403 Forbidden: Your user account (' . htmlspecialchars($username) . ') is authenticated but not authorized to use this application. Please contact an administrator.');
+        die('403 Запрещено: Ваша учетная запись (' . htmlspecialchars($username) . ') аутентифицирована, но не авторизована для использования этого приложения. Пожалуйста, свяжитесь с администратором.');
     }
    ;
 
 } catch (PDOException $e) {
-    // This would happen if the database is down or there's a query error.
+    // Это произойдет, если база данных не работает или произошла ошибка запроса.
     //session_destroy();
     header('HTTP/1.1 500 Internal Server Error');
-    error_log("Authorization check failed: " . $e->getMessage()); // Log the actual error
-    die("A critical error occurred during the authorization check. Please try again later.");
+    error_log("Ошибка проверки авторизации: " . $e->getMessage()); // Логируем фактическую ошибку
+    die("Во время проверки авторизации произошла критическая ошибка. Пожалуйста, повторите попытку позже.");
 }

@@ -3,7 +3,7 @@
 // ini_set("display_errors","On");
 require_once '../../layouts/admin/header.php';
 
-// Initialize variables
+// Инициализация переменных
 $department_name = "";
 $department_id = 0;
 $update_mode = false;
@@ -17,54 +17,54 @@ if (isset($_COOKIE["success_message"]))
 }
 
 
-// Handle POST requests for creating and updating
+// Обработка POST-запросов для создания и обновления
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $department_name = trim($_POST['name']);
 
     if (empty($department_name)) {
-        $error_message = "Department name cannot be empty.";
+        $error_message = "Название департамента не может быть пустым.";
     } else {
-        // Update existing department
+        // Обновление существующего департамента
         if (isset($_POST['update'])) {
             $department_id = $_POST['id'];
             try {
                 $sql = "UPDATE departments SET name = :name WHERE id = :id";
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute(['name' => $department_name, 'id' => $department_id]);
-                log_event("Updated department ID: {$department_id} with new name '{$department_name}'");
-                $success_message = "Department updated successfully.";
+                log_event("Обновлен департамент ID: {$department_id} с новым названием '{$department_name}'");
+                $success_message = "Департамент успешно обновлен.";
 
                 setcookie("success_message", $success_message, time()+3600);
                 header("Location: departments.php");
                 
             } catch (PDOException $e) {
-                $error_message = "Error updating department. It might already exist. " . $e->getMessage();
+                $error_message = "Ошибка обновления департамента. Возможно, он уже существует. " . $e->getMessage();
             }
-        // Create new department
+        // Создание нового департамента
         } elseif (isset($_POST['save'])) {
             try {
                 $sql = "INSERT INTO departments (name) VALUES (:name)";
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute(['name' => $department_name]);
                 $new_id = $pdo->lastInsertId();
-                //log_event("Created new department '{$department_name}' (ID: {$new_id})");
-                $success_message = "Department created successfully.";
-                $department_name = ""; // Clear field after successful insert
+                //log_event("Создан новый департамент '{$department_name}' (ID: {$new_id})");
+                $success_message = "Департамент успешно создан.";
+                $department_name = ""; // Очистить поле после успешной вставки
 
                 setcookie("success_message", $success_message, time()+3600);
                 header("Location: departments.php");
 
               
             } catch (PDOException $e) {
-                $error_message = "Error creating department. It might already exist. " . $e->getMessage();
+                $error_message = "Ошибка создания департамента. Возможно, он уже существует. " . $e->getMessage();
             }
         }
     }
 }
 
-// Handle GET requests for editing and deleting
+// Обработка GET-запросов для редактирования и удаления
 if ($_SERVER["REQUEST_METHOD"] == "GET") {
-    // Populate form for editing
+    // Заполнение формы для редактирования
     if (isset($_GET['edit'])) {
         $department_id = (int) $_GET['edit'];
         $update_mode = true;
@@ -76,27 +76,27 @@ if ($_SERVER["REQUEST_METHOD"] == "GET") {
             $department_name = $department['name'];
         }
     }
-    // Handle deletion
+    // Обработка удаления
     if (isset($_GET['delete'])) {
         $department_id = $_GET['delete'];
 
         try {
-            // Check if any users are assigned to this department
+            // Проверка, есть ли пользователи, назначенные этому департаменту
             $stmt_check = $pdo->prepare("SELECT COUNT(*) FROM users WHERE department_id = :id");
             $stmt_check->execute(['id' => $department_id]);
             $user_count = $stmt_check->fetchColumn();
 
             if ($user_count > 0) {
-                $error_message = "Cannot delete department: users are currently assigned to it. Please reassign them first.";
+                $error_message = "Невозможно удалить департамент: к нему привязаны пользователи. Пожалуйста, сначала переназначьте их.";
             } else {
                 $sql = "DELETE FROM departments WHERE id = :id";
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute(['id' => $department_id]);
-                log_event("Deleted department ID: {$department_id}");
-                $success_message = "Department deleted successfully.";
+                log_event("Удален департамент ID: {$department_id}");
+                $success_message = "Департамент успешно удален.";
             }
         } catch (PDOException $e) {
-            $error_message = "Error deleting department: " . $e->getMessage();
+            $error_message = "Ошибка удаления департамента: " . $e->getMessage();
         }
     }
 }
@@ -105,7 +105,7 @@ if ($_SERVER["REQUEST_METHOD"] == "GET") {
 
 <div class="row">
     <div class="col-md-4">
-        <h3><?php echo $update_mode ? 'Edit Department' : 'Add New Department'; ?></h3>
+        <h3><?php echo $update_mode ? 'Редактировать департамент' : 'Добавить новый департамент'; ?></h3>
         <form action="departments.php" method="post" class="card p-3">
             <input type="hidden" name="id" value="<?php echo $department_id; ?>">
             
@@ -119,27 +119,27 @@ if ($_SERVER["REQUEST_METHOD"] == "GET") {
             <?php endif; ?>
             
             <div class="form-group">
-                <label for="name">Department Name</label>
+                <label for="name">Название департамента</label>
                 <input type="text" name="name" id="name" class="form-control" value="<?php echo htmlspecialchars($department_name); ?>" required>
             </div>
             <div class="form-group">
                 <?php if ($update_mode): ?>
-                    <button type="submit" class="btn btn-primary" name="update">Update</button>
-                    <a href="departments.php" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary" name="update">Обновить</button>
+                    <a href="departments.php" class="btn btn-secondary">Отмена</a>
                 <?php else: ?>
-                    <button type="submit" class="btn btn-success" name="save">Save</button>
+                    <button type="submit" class="btn btn-success" name="save">Сохранить</button>
                 <?php endif; ?>
             </div>
         </form>
     </div>
     <div class="col-md-8">
-        <h3>Department List</h3>
+        <h3>Список департаментов</h3>
         <table class="table table-bordered table-hover">
             <thead class="thead-light">
                 <tr>
                     <th>ID</th>
-                    <th>Name</th>
-                    <th>Actions</th>
+                    <th>Название</th>
+                    <th>Действия</th>
                 </tr>
             </thead>
             <tbody>
@@ -150,8 +150,8 @@ if ($_SERVER["REQUEST_METHOD"] == "GET") {
                         <td><?php echo $row['id']; ?></td>
                         <td><?php echo htmlspecialchars($row['name']); ?></td>
                         <td>
-                            <a href="departments.php?edit=<?php echo $row['id']; ?>" class="btn btn-sm btn-info" title="Edit"><i class="bi bi-pencil"></i></a>
-                            <a href="departments.php?delete=<?php echo $row['id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this department?');" title="Delete"><i class="bi bi-trash"></i></a>
+                            <a href="departments.php?edit=<?php echo $row['id']; ?>" class="btn btn-sm btn-info" title="Редактировать"><i class="bi bi-pencil"></i></a>
+                            <a href="departments.php?delete=<?php echo $row['id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Вы уверены, что хотите удалить этот департамент?');" title="Удалить"><i class="bi bi-trash"></i></a>
                         </td>
                     </tr>
                 <?php } ?>

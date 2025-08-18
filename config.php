@@ -1,44 +1,44 @@
 <?php
 /*
- * Database configuration for PostgreSQL using PDO.
+ * Конфигурация базы данных для PostgreSQL с использованием PDO.
  *
- * Please fill in your database connection details below.
+ * Пожалуйста, заполните данные для подключения к вашей базе данных ниже.
  */
 
-// Hostname for the database server.
+// Имя хоста для сервера базы данных.
 define('DB_HOST', 'localhost');
 
-// Port number for the PostgreSQL server. Default is 5432.
+// Номер порта для сервера PostgreSQL. По умолчанию 5432.
 define('DB_PORT', '5432');
 
-// The name of the database.
+// Название базы данных.
 define('DB_NAME', 'rashod');
 
-// The username for the database connection.
+// Имя пользователя для подключения к базе данных.
 define('DB_USER', 'postgres');
 
-// The password for the database connection.
+// Пароль для подключения к базе данных.
 define('DB_PASSWORD', '1');
 
 
-// --- Do not edit below this line ---
+// --- Не редактировать ниже этой строки ---
 
-// DSN (Data Source Name) for PDO
+// DSN (Data Source Name) для PDO
 $dsn = "pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME;
 
-// PDO options
+// Опции PDO
 $options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION, // Throw exceptions on errors
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,       // Fetch results as associative arrays
-    PDO::ATTR_EMULATE_PREPARES   => false,                  // Use real prepared statements
+    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION, // Генерировать исключения при ошибках
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,       // Получать результаты в виде ассоциативных массивов
+    PDO::ATTR_EMULATE_PREPARES   => false,                  // Использовать настоящие подготовленные выражения
 ];
 
 try {
-    // Create a PDO instance
+    // Создаем экземпляр PDO
     $pdo = new PDO($dsn, DB_USER, DB_PASSWORD, $options);
 } catch (PDOException $e) {
-    // If connection fails, display a generic error message.
-    // In a production environment, you should log this error instead of displaying it.
+    // Если подключение не удалось, отображаем общее сообщение об ошибке.
+    // В производственной среде следует логировать эту ошибку, а не отображать ее.
     header('Content-Type: text/plain; charset=utf-8');
     die("Ошибка подключения к базе данных. Пожалуйста, проверьте настройки в файле config.php и убедитесь, что сервер PostgreSQL доступен.\n\n" . $e->getMessage());
 }

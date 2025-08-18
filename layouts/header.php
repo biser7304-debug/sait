@@ -1,9 +1,9 @@
 <?php
-// Centralized authentication and authorization check
+// Централизованная проверка аутентификации и авторизации
 require_once '../includes/auth.php';
 
-// Load application settings from the database
-// The $pdo object is available from config.php, which is included by auth.php
+// Загрузка настроек приложения из базы данных
+// Объект $pdo доступен из config.php, который подключается через auth.php
 $app_settings = [];
 try {
     $stmt = $pdo->query("SELECT setting_key, setting_value FROM settings");
@@ -11,9 +11,9 @@ try {
         $app_settings[$row['setting_key']] = $row['setting_value'];
     }
 } catch (PDOException $e) {
-    error_log("Could not load settings from database: " . $e->getMessage());
+    error_log("Не удалось загрузить настройки из базы данных: " . $e->getMessage());
 }
-$app_title = $app_settings['app_title'] ?? 'Staff Status Tracker';
+$app_title = $app_settings['app_title'] ?? 'Система учета сотрудников';
 $app_logo = $app_settings['app_logo'] ?? '';
 $color_scheme = $app_settings['color_scheme'] ?? 'default';
 
@@ -48,7 +48,7 @@ $color_scheme = $app_settings['color_scheme'] ?? 'default';
     }
     ?>
     <style>
-        body { padding-bottom: 70px; /* Height of the footer */ }
+        body { padding-bottom: 70px; /* Высота футера */ }
         .footer { position: fixed; bottom: 0; width: 100%; height: 60px; line-height: 60px; background-color: #f5f5f5; }
         .navbar-brand img { max-height: 30px; margin-right: 10px; vertical-align: middle; }
     </style>
@@ -63,14 +63,14 @@ $color_scheme = $app_settings['color_scheme'] ?? 'default';
             <?php endif; ?>
             <?php echo htmlspecialchars($app_title); ?>
         </a>
-        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Переключить навигацию">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav mr-auto">
                 <?php if ($USER['role'] === 'admin'): ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="admin/departments.php">Admin Panel</a>
+                        <a class="nav-link" href="admin/departments.php">Панель администратора</a>
                     </li>
                 <?php endif; ?>
             </ul>

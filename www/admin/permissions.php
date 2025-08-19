@@ -8,7 +8,7 @@ $default_admins = ['as-biserov', 'as-karpov'];
 $user_id = 0;
 $username = '';
 $role = 'department';
-$department_id = null;
+$department_ids = []; // Теперь массив для нескольких ID
 $update_mode = false;
 $error_message = '';
 $success_message = '';
@@ -21,75 +21,87 @@ $departments = $departments_stmt->fetchAll();
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $username = strtolower(trim($_POST['username']));
     $role = $_POST['role'];
-    $department_id = !empty($_POST['department_id']) ? $_POST['department_id'] : null;
+    // Получаем массив ID департаментов
+    $department_ids = isset($_POST['department_ids']) ? $_POST['department_ids'] : [];
 
     if (empty($username) || empty($role)) {
         $error_message = "Имя пользователя и роль обязательны для заполнения.";
+    } elseif ($role === 'department' && empty($department_ids)) {
+        $error_message = "Для роли 'Пользователь департамента' необходимо выбрать хотя бы один департамент.";
     } else {
-        // Обработка обновления
-        if (isset($_POST['update'])) {
-            $user_id = $_POST['id'];
-            $original_user_stmt = $pdo->prepare("SELECT username FROM users WHERE id = :id");
-            $original_user_stmt->execute(['id' => $user_id]);
-            $original_username = $original_user_stmt->fetchColumn();
+        $pdo->beginTransaction();
+        try {
+            // --- Создание или обновление пользователя ---
+            if (isset($_POST['update'])) {
+                $user_id = $_POST['id'];
+                $original_user_stmt = $pdo->prepare("SELECT username FROM users WHERE id = :id");
+                $original_user_stmt->execute(['id' => $user_id]);
+                $original_username = $original_user_stmt->fetchColumn();
 
-            // Запрет на изменение роли администратора по умолчанию
-            if (in_array($original_username, $default_admins) && $role !== 'admin') {
-                $error_message = "Нельзя изменить роль администратора по умолчанию.";
-            } else {
-                try {
-                    $sql = "UPDATE users SET username = :username, role = :role, department_id = :department_id WHERE id = :id";
-                    $stmt = $pdo->prepare($sql);
-                    $stmt->execute([
-                        'username' => $username,
-                        'role' => $role,
-                        'department_id' => ($role === 'admin') ? null : $department_id,
-                        'id' => $user_id
-                    ]);
-                    log_event("Обновлены права для пользователя '{$username}' (ID: {$user_id})");
-                    $success_message = "Права пользователя успешно обновлены.";
-                } catch (PDOException $e) {
-                    $error_message = "Ошибка обновления пользователя. Имя пользователя может уже существовать.";
+                if (in_array($original_username, $default_admins) && $role !== 'admin') {
+                    throw new Exception("Нельзя изменить роль администратора по умолчанию.");
+                }
+
+                $stmt = $pdo->prepare("UPDATE users SET username = :username, role = :role WHERE id = :id");
+                $stmt->execute(['username' => $username, 'role' => $role, 'id' => $user_id]);
+                log_event("Обновлен пользователь '{$username}' (ID: {$user_id})");
+
+            } elseif (isset($_POST['save'])) {
+                $stmt = $pdo->prepare("INSERT INTO users (username, role) VALUES (:username, :role)");
+                $stmt->execute(['username' => $username, 'role' => $role]);
+                $user_id = $pdo->lastInsertId();
+                log_event("Создан пользователь '{$username}' (ID: {$user_id})");
+            }
+
+            // --- Обновление прав на департаменты ---
+            if ($user_id > 0) {
+                // Удаляем старые права
+                $stmt_delete_perms = $pdo->prepare("DELETE FROM user_department_permissions WHERE user_id = :user_id");
+                $stmt_delete_perms->execute(['user_id' => $user_id]);
+
+                // Если роль - админ, права не назначаются. Если пользователь, назначаем выбранные.
+                if ($role === 'department') {
+                    $stmt_insert_perms = $pdo->prepare("INSERT INTO user_department_permissions (user_id, department_id) VALUES (:user_id, :department_id)");
+                    foreach ($department_ids as $dep_id) {
+                        $stmt_insert_perms->execute(['user_id' => $user_id, 'department_id' => $dep_id]);
+                    }
                 }
             }
-        // Обработка создания
-        } elseif (isset($_POST['save'])) {
-            try {
-                $sql = "INSERT INTO users (username, role, department_id) VALUES (:username, :role, :department_id)";
-                $stmt = $pdo->prepare($sql);
-                $stmt->execute([
-                    'username' => $username,
-                    'role' => $role,
-                    'department_id' => ($role === 'admin') ? null : $department_id,
-                ]);
-                $new_id = $pdo->lastInsertId();
-                log_event("Делегированы права новому пользователю '{$username}' (ID: {$new_id})");
-                $success_message = "Права пользователя успешно предоставлены.";
-            } catch (PDOException $e) {
-                $error_message = "Ошибка предоставления прав. Имя пользователя может уже существовать.";
-            }
+
+            $pdo->commit();
+            $success_message = "Права пользователя успешно сохранены.";
+
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            $error_message = "Ошибка сохранения прав: " . $e->getMessage();
         }
     }
 }
 
 // --- Обработка GET-запросов ---
 if ($_SERVER["REQUEST_METHOD"] == "GET") {
-    // Заполнение формы для редактирования
     if (isset($_GET['edit'])) {
-        $user_id = $_GET['edit'];
+        $user_id = (int)$_GET['edit'];
         $update_mode = true;
-        $stmt = $pdo->prepare("SELECT username, role, department_id FROM users WHERE id = :id");
-        $stmt->execute(['id' => $user_id]);
-        $user = $stmt->fetch();
+
+        // Получаем данные пользователя
+        $stmt_user = $pdo->prepare("SELECT username, role FROM users WHERE id = :id");
+        $stmt_user->execute(['id' => $user_id]);
+        $user = $stmt_user->fetch();
+
         if ($user) {
             $username = $user['username'];
             $role = $user['role'];
-            $department_id = $user['department_id'];
+
+            // Получаем связанные департаменты
+            $stmt_perms = $pdo->prepare("SELECT department_id FROM user_department_permissions WHERE user_id = :user_id");
+            $stmt_perms->execute(['id' => $user_id]);
+            $department_ids = $stmt_perms->fetchAll(PDO::FETCH_COLUMN);
         }
     }
-    // Обработка удаления
+
     if (isset($_GET['delete'])) {
-        $user_id = $_GET['delete'];
+        $user_id = (int)$_GET['delete'];
         $stmt = $pdo->prepare("SELECT username FROM users WHERE id = :id");
         $stmt->execute(['id' => $user_id]);
         $user_to_delete = $stmt->fetchColumn();
@@ -97,14 +109,22 @@ if ($_SERVER["REQUEST_METHOD"] == "GET") {
         if (in_array($user_to_delete, $default_admins)) {
             $error_message = "Администраторов по умолчанию нельзя удалить.";
         } else {
+            // Транзакция для безопасного удаления
+            $pdo->beginTransaction();
             try {
-                $sql = "DELETE FROM users WHERE id = :id";
-                $stmt = $pdo->prepare($sql);
-                $stmt->execute(['id' => $user_id]);
-                log_event("Удалены права пользователя '{$user_to_delete}' (ID: {$user_id})");
-                $success_message = "Права пользователя успешно отозваны.";
-            } catch (PDOException $e) {
-                $error_message = "Ошибка отзыва прав.";
+                // Сначала удаляем права
+                $stmt_del_perms = $pdo->prepare("DELETE FROM user_department_permissions WHERE user_id = :id");
+                $stmt_del_perms->execute(['id' => $user_id]);
+                // Затем удаляем пользователя
+                $stmt_del_user = $pdo->prepare("DELETE FROM users WHERE id = :id");
+                $stmt_del_user->execute(['id' => $user_id]);
+
+                $pdo->commit();
+                log_event("Удален пользователь '{$user_to_delete}' (ID: {$user_id})");
+                $success_message = "Пользователь и его права успешно удалены.";
+            } catch (Exception $e) {
+                $pdo->rollBack();
+                $error_message = "Ошибка удаления пользователя: " . $e->getMessage();
             }
         }
     }
@@ -119,23 +139,22 @@ if ($_SERVER["REQUEST_METHOD"] == "GET") {
             <?php if ($error_message): ?><div class="alert alert-danger"><?php echo $error_message; ?></div><?php endif; ?>
             <?php if ($success_message): ?><div class="alert alert-success"><?php echo $success_message; ?></div><?php endif; ?>
 
-            <div class="form-group">
+            <div class="form-group mb-3">
                 <label for="username">Имя пользователя (из Kerberos, без @domain)</label>
                 <input type="text" name="username" id="username" class="form-control" value="<?php echo htmlspecialchars($username); ?>" required>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-3">
                 <label for="role">Роль</label>
                 <select name="role" id="role" class="form-control" required>
                     <option value="department" <?php if($role === 'department') echo 'selected'; ?>>Пользователь департамента</option>
                     <option value="admin" <?php if($role === 'admin') echo 'selected'; ?>>Администратор</option>
                 </select>
             </div>
-            <div class="form-group" id="department-select-group" style="<?php echo ($role !== 'department') ? 'display: none;' : ''; ?>">
-                <label for="department_id">Департамент</label>
-                <select name="department_id" id="department_id" class="form-control">
-                    <option value="">-- Выберите департамент --</option>
+            <div class="form-group mb-3" id="department-select-group" style="<?php echo ($role !== 'department') ? 'display: none;' : ''; ?>">
+                <label for="department_ids">Департаменты (удерживайте Ctrl/Cmd для выбора нескольких)</label>
+                <select name="department_ids[]" id="department_ids" class="form-control" multiple style="height: 150px;">
                     <?php foreach ($departments as $dep): ?>
-                        <option value="<?php echo $dep['id']; ?>" <?php echo ($department_id == $dep['id']) ? 'selected' : ''; ?>>
+                        <option value="<?php echo $dep['id']; ?>" <?php echo in_array($dep['id'], $department_ids) ? 'selected' : ''; ?>>
                             <?php echo htmlspecialchars($dep['name']); ?>
                         </option>
                     <?php endforeach; ?>
@@ -159,18 +178,27 @@ if ($_SERVER["REQUEST_METHOD"] == "GET") {
                 <tr>
                     <th>Имя пользователя</th>
                     <th>Роль</th>
-                    <th>Департамент</th>
+                    <th>Разрешенные департаменты</th>
                     <th>Действия</th>
                 </tr>
             </thead>
             <tbody>
                 <?php
-                $stmt = $pdo->query("SELECT u.id, u.username, u.role, d.name as department_name FROM users u LEFT JOIN departments d ON u.department_id = d.id ORDER BY u.username");
-                while ($row = $stmt->fetch()) { ?>
+                // Запрос для получения пользователей и списка их департаментов
+                $sql = "
+                    SELECT u.id, u.username, u.role, STRING_AGG(d.name, ', ') AS department_names
+                    FROM users u
+                    LEFT JOIN user_department_permissions udp ON u.id = udp.user_id
+                    LEFT JOIN departments d ON udp.department_id = d.id
+                    GROUP BY u.id, u.username, u.role
+                    ORDER BY u.username
+                ";
+                $stmt = $pdo->query($sql);
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) { ?>
                     <tr>
                         <td><i class="bi bi-person"></i> <?php echo htmlspecialchars($row['username']); ?></td>
-                        <td><?php echo $row['role'] === 'admin' ? '<i class="bi bi-shield-lock"></i> Администратор' : '<i class="bi bi-person-workspace"></i> Департамент'; ?></td>
-                        <td><?php echo htmlspecialchars($row['department_name'] ?? 'N/A'); ?></td>
+                        <td><?php echo $row['role'] === 'admin' ? '<i class="bi bi-shield-lock"></i> Администратор' : '<i class="bi bi-person-workspace"></i> Пользователь'; ?></td>
+                        <td><?php echo htmlspecialchars($row['department_names'] ?? 'N/A'); ?></td>
                         <td>
                             <a href="permissions.php?edit=<?php echo $row['id']; ?>" class="btn btn-sm btn-info" title="Редактировать"><i class="bi bi-pencil"></i></a>
                             <?php if (!in_array($row['username'], $default_admins)): ?>

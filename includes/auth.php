@@ -69,18 +69,24 @@ $username = strtolower($username_parts[0]); // Используем нижний
 require_once __DIR__ . '/../config.php'; // Убеждаемся, что объект $pdo доступен
 require_once 'functions.php';
 try {
-    $stmt = $pdo->prepare("SELECT username, role, department_id FROM users WHERE username = :username");
+    $stmt = $pdo->prepare("SELECT id, username, role FROM users WHERE username = :username");
     $stmt->execute(['username' => $username]);
     $user_data = $stmt->fetch();
 
     if ($user_data) {
-        // Пользователь найден в нашей базе данных. Авторизуем его, создав сессию.
-        //session_regenerate_id(true); // Регенерируем ID сессии для предотвращения атак фиксации сессии
-//  echo $_SERVER['PHP_AUTH_USER'] . " 6 username=" . $user_data['role'];
+        // Пользователь найден, устанавливаем основные данные.
         $USER['loggedin'] = true;
+        $USER['id'] = $user_data['id'];
         $USER['username'] = $user_data['username'];
         $USER['role'] = $user_data['role'];
-        $USER['department_id'] = $user_data['department_id'];
+        $USER['department_ids'] = []; // Инициализируем как пустой массив
+
+        // Если пользователь не администратор, получаем список его департаментов.
+        if ($user_data['role'] === 'department') {
+            $stmt_perms = $pdo->prepare("SELECT department_id FROM user_department_permissions WHERE user_id = :user_id");
+            $stmt_perms->execute(['user_id' => $user_data['id']]);
+            $USER['department_ids'] = $stmt_perms->fetchAll(PDO::FETCH_COLUMN);
+        }
 
     } else {
         // Пользователь аутентифицирован через Kerberos, но не зарегистрирован в базе данных нашего приложения.

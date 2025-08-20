@@ -10,10 +10,10 @@ $user_departments = [];
 
 // --- Логика для пользователей департаментов ---
 if ($USER['role'] === 'department') {
-    // Получаем список департаментов, к которым у пользователя есть доступ
+    // Получаем список департаментов, к которым у пользователя есть доступ, и сортируем его
     if (!empty($USER['department_ids'])) {
         $in_placeholders = implode(',', array_fill(0, count($USER['department_ids']), '?'));
-        $stmt = $pdo->prepare("SELECT id, name FROM departments WHERE id IN ($in_placeholders) ORDER BY name");
+        $stmt = $pdo->prepare("SELECT id, name FROM departments WHERE id IN ($in_placeholders) ORDER BY sort_index ASC, name ASC");
         $stmt->execute($USER['department_ids']);
         $user_departments = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -69,18 +69,57 @@ if ($USER['role'] === 'department') {
 }
 
 // --- Логика для всех пользователей (отображение сводной таблицы) ---
-try {
-    $sql_summary = "
-        SELECT d.name as department_name, s.present, s.on_duty, s.trip, s.vacation, s.sick, s.other, s.notes
-        FROM departments d
-        LEFT JOIN statuses s ON d.id = s.department_id AND s.report_date = :view_date
-        ORDER BY d.name;
-    ";
-    $stmt_summary = $pdo->prepare($sql_summary);
-    $stmt_summary->execute(['view_date' => $view_date]);
-    $summary_data = $stmt_summary->fetchAll();
-} catch (PDOException $e) {
-    $error_message = "Ошибка получения сводных данных: " . $e->getMessage();
+
+// 1. Получаем все департаменты, отсортированные правильно
+$stmt_all_deps = $pdo->query("SELECT * FROM departments ORDER BY sort_index ASC, name ASC");
+$all_departments = $stmt_all_deps->fetchAll(PDO::FETCH_ASSOC);
+
+// 2. Получаем все статусы за выбранную дату
+$stmt_statuses = $pdo->prepare("SELECT * FROM statuses WHERE report_date = :view_date");
+$stmt_statuses->execute(['view_date' => $view_date]);
+$statuses_raw = $stmt_statuses->fetchAll(PDO::FETCH_ASSOC);
+$statuses_by_dep_id = [];
+foreach ($statuses_raw as $status) {
+    $statuses_by_dep_id[$status['department_id']] = $status;
+}
+
+// 3. Объединяем данные: добавляем статусы к департаментам
+foreach ($all_departments as &$dep) {
+    if (isset($statuses_by_dep_id[$dep['id']])) {
+        $dep = array_merge($dep, $statuses_by_dep_id[$dep['id']]);
+    }
+}
+unset($dep); // Разрываем ссылку
+
+// 4. Строим дерево из объединенных данных
+$department_tree = build_tree($all_departments);
+
+// 5. Функция для рекурсивного отображения дерева сводки
+function display_summary_tree($nodes, &$grand_total, $level = 0) {
+    foreach ($nodes as $node) {
+        $present = $node['present'] ?? 0; $on_duty = $node['on_duty'] ?? 0; $trip = $node['trip'] ?? 0;
+        $vacation = $node['vacation'] ?? 0; $sick = $node['sick'] ?? 0; $other = $node['other'] ?? 0;
+        $total = $present + $on_duty + $trip + $vacation + $sick + $other;
+
+        $grand_total['total'] += $total; $grand_total['present'] += $present; $grand_total['on_duty'] += $on_duty;
+        $grand_total['trip'] += $trip; $grand_total['vacation'] += $vacation; $grand_total['sick'] += $sick; $grand_total['other'] += $other;
+
+        echo '<tr>';
+        echo '<td class="text-left align-middle">' . str_repeat('&mdash; ', $level) . htmlspecialchars($node['name']) . '</td>';
+        echo '<td class="align-middle"><strong>' . $total . '</strong></td>';
+        echo '<td class="align-middle">' . $present . '</td>';
+        echo '<td class="align-middle">' . $on_duty . '</td>';
+        echo '<td class="align-middle">' . $trip . '</td>';
+        echo '<td class="align-middle">' . $vacation . '</td>';
+        echo '<td class="align-middle">' . $sick . '</td>';
+        echo '<td class="align-middle">' . $other . '</td>';
+        echo '<td class="text-left align-middle" style="white-space: pre-wrap;">' . htmlspecialchars($node['notes'] ?? '') . '</td>';
+        echo '</tr>';
+
+        if (isset($node['children'])) {
+            display_summary_tree($node['children'], $grand_total, $level + 1);
+        }
+    }
 }
 ?>
 
@@ -171,26 +210,8 @@ try {
                 <tbody>
                     <?php
                     $grand_total = ['total' => 0, 'present' => 0, 'on_duty' => 0, 'trip' => 0, 'vacation' => 0, 'sick' => 0, 'other' => 0];
-                    foreach ($summary_data as $row):
-                        $present = $row['present'] ?? 0; $on_duty = $row['on_duty'] ?? 0; $trip = $row['trip'] ?? 0;
-                        $vacation = $row['vacation'] ?? 0; $sick = $row['sick'] ?? 0; $other = $row['other'] ?? 0;
-                        $total = $present + $on_duty + $trip + $vacation + $sick + $other;
-
-                        $grand_total['total'] += $total; $grand_total['present'] += $present; $grand_total['on_duty'] += $on_duty;
-                        $grand_total['trip'] += $trip; $grand_total['vacation'] += $vacation; $grand_total['sick'] += $sick; $grand_total['other'] += $other;
+                    display_summary_tree($department_tree, $grand_total);
                     ?>
-                    <tr>
-                        <td class="text-left align-middle"><?php echo htmlspecialchars($row['department_name']); ?></td>
-                        <td class="align-middle"><strong><?php echo $total; ?></strong></td>
-                        <td class="align-middle"><?php echo $present; ?></td>
-                        <td class="align-middle"><?php echo $on_duty; ?></td>
-                        <td class="align-middle"><?php echo $trip; ?></td>
-                        <td class="align-middle"><?php echo $vacation; ?></td>
-                        <td class="align-middle"><?php echo $sick; ?></td>
-                        <td class="align-middle"><?php echo $other; ?></td>
-                        <td class="text-left align-middle" style="white-space: pre-wrap;"><?php echo htmlspecialchars($row['notes'] ?? ''); ?></td>
-                    </tr>
-                    <?php endforeach; ?>
                 </tbody>
                 <tfoot class="bg-secondary text-white font-weight-bold">
                     <tr>

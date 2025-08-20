@@ -8,7 +8,7 @@ $error_message = '';
 $success_message = '';
 
 // Получение всех департаментов для селектора
-$departments_stmt = $pdo->query("SELECT id, name FROM departments ORDER BY name");
+$departments_stmt = $pdo->query("SELECT id, name FROM departments ORDER BY sort_index ASC, name ASC");
 $departments = $departments_stmt->fetchAll();
 
 // Обработка POST-запроса для сохранения данных о статусе

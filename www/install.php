@@ -18,7 +18,8 @@ try {
             id SERIAL PRIMARY KEY,
             name VARCHAR(255) UNIQUE NOT NULL,
             number_of_employees INTEGER, -- Количество сотрудников, может быть пустым
-            parent_id INTEGER REFERENCES departments(id) ON DELETE SET NULL -- Для древовидной структуры
+            parent_id INTEGER REFERENCES departments(id) ON DELETE SET NULL, -- Для древовидной структуры
+            sort_index INTEGER DEFAULT 0 -- Индекс для ручной сортировки
         );
 
         -- Таблица пользователей

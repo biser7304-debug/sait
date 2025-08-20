@@ -68,6 +68,22 @@ $username = strtolower($username_parts[0]); // Используем нижний
 // Этот код будет выполняться только один раз за сессию.
 require_once __DIR__ . '/../config.php'; // Убеждаемся, что объект $pdo доступен
 require_once 'functions.php';
+/**
+ * Рекурсивно получает все ID дочерних подразделений для заданного ID родителя.
+ */
+function get_all_child_department_ids($pdo, $parent_id) {
+    $children_ids = [];
+    $stmt = $pdo->prepare("SELECT id FROM departments WHERE parent_id = :parent_id");
+    $stmt->execute(['parent_id' => $parent_id]);
+    $children = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    foreach ($children as $child_id) {
+        $children_ids[] = $child_id;
+        $children_ids = array_merge($children_ids, get_all_child_department_ids($pdo, $child_id));
+    }
+    return $children_ids;
+}
+
 try {
     $stmt = $pdo->prepare("SELECT id, username, role FROM users WHERE username = :username");
     $stmt->execute(['username' => $username]);
@@ -83,9 +99,23 @@ try {
 
         // Если пользователь не администратор, получаем список его департаментов.
         if ($user_data['role'] === 'department') {
+            // 1. Получаем явно назначенные права
             $stmt_perms = $pdo->prepare("SELECT department_id FROM user_department_permissions WHERE user_id = :user_id");
             $stmt_perms->execute(['user_id' => $user_data['id']]);
-            $USER['department_ids'] = $stmt_perms->fetchAll(PDO::FETCH_COLUMN);
+            $explicit_ids = $stmt_perms->fetchAll(PDO::FETCH_COLUMN);
+
+            $all_accessible_ids = $explicit_ids;
+
+            // 2. Для каждого явного права рекурсивно получаем все дочерние
+            foreach ($explicit_ids as $dep_id) {
+                $child_ids = get_all_child_department_ids($pdo, $dep_id);
+                if (!empty($child_ids)) {
+                    $all_accessible_ids = array_merge($all_accessible_ids, $child_ids);
+                }
+            }
+
+            // 3. Сохраняем уникальные ID в сессию
+            $USER['department_ids'] = array_unique($all_accessible_ids);
         }
 
     } else {

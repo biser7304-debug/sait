@@ -14,7 +14,7 @@ $error_message = '';
 $success_message = '';
 
 // Получение всех департаментов для выпадающего списка
-$departments_stmt = $pdo->query("SELECT id, name FROM departments ORDER BY name");
+$departments_stmt = $pdo->query("SELECT id, name FROM departments ORDER BY sort_index ASC, name ASC");
 $departments = $departments_stmt->fetchAll();
 
 // --- Обработка POST-запросов ---
@@ -186,7 +186,11 @@ if ($_SERVER["REQUEST_METHOD"] == "GET") {
                 <?php
                 // Запрос для получения пользователей и списка их департаментов
                 $sql = "
-                    SELECT u.id, u.username, u.role, STRING_AGG(d.name, ', ') AS department_names
+                    SELECT
+                        u.id,
+                        u.username,
+                        u.role,
+                        STRING_AGG(d.name, ', ' ORDER BY d.sort_index ASC, d.name ASC) AS department_names
                     FROM users u
                     LEFT JOIN user_department_permissions udp ON u.id = udp.user_id
                     LEFT JOIN departments d ON udp.department_id = d.id

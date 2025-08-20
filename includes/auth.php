@@ -3,7 +3,8 @@ error_reporting(E_ALL);
 ini_set("display_errors","On");
 
 //echo $_SERVER["PHP_AUTH_USER"];
-//$_SERVER["PHP_AUTH_USER"] = "mr-morozov";
+//$_SERVER["PHP_AUTH_USER"] = "as-biserov";
+//$_SERVER["PHP_AUTH_USER"] = "aa-admin";
 
 //if (in_array($_SERVER['REMOTE_ADDR'], ["116.128.8.123", "116.128.8.24"]))
 //{

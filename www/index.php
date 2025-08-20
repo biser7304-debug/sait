@@ -7,6 +7,8 @@ $success_message = '';
 $view_date = $_GET['view_date'] ?? date('Y-m-d');
 $selected_department_id = null;
 $user_departments = [];
+// Дата для формы подачи статуса
+$submission_date = $_GET['submission_date'] ?? date('Y-m-d');
 
 // --- Логика для пользователей департаментов ---
 if ($USER['role'] === 'department') {
@@ -28,6 +30,7 @@ if ($USER['role'] === 'department') {
     // Обработка отправки формы
     if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_status'])) {
         $department_id_to_submit = (int)$_POST['department_id'];
+        $submission_date = $_POST['submission_date']; // Получаем дату из формы
 
         // --- Сохраняем отправленные данные для предзаполнения формы в случае ошибки ---
         $current_status = [
@@ -53,9 +56,8 @@ if ($USER['role'] === 'department') {
             } else {
                 // --- Если валидация прошла, сохраняем данные ---
                 try {
-                    $report_date_today = date('Y-m-d');
                     $status_values = array_merge(
-                        ['department_id' => $department_id_to_submit, 'report_date' => $report_date_today],
+                        ['department_id' => $department_id_to_submit, 'report_date' => $submission_date],
                         $current_status
                     );
 
@@ -66,8 +68,8 @@ if ($USER['role'] === 'department') {
                             vacation = EXCLUDED.vacation, sick = EXCLUDED.sick, other = EXCLUDED.other, notes = EXCLUDED.notes";
                     $stmt = $pdo->prepare($sql);
                     $stmt->execute($status_values);
-                    log_event("Отправлен/обновлен статус для департамента ID {$department_id_to_submit} за дату {$report_date_today}");
-                    $success_message = "Данные для департамента успешно сохранены.";
+                    log_event("Отправлен/обновлен статус для департамента ID {$department_id_to_submit} за дату {$submission_date}");
+                    $success_message = "Данные для департамента за " . date('d.m.Y', strtotime($submission_date)) . " успешно сохранены.";
                 } catch (PDOException $e) {
                     $error_message = "Ошибка сохранения данных: " . $e->getMessage();
                 }
@@ -79,7 +81,7 @@ if ($USER['role'] === 'department') {
     $current_status = ['present' => 0, 'on_duty' => 0, 'trip' => 0, 'vacation' => 0, 'sick' => 0, 'other' => 0, 'notes' => ''];
     if ($selected_department_id) {
         $stmt = $pdo->prepare("SELECT * FROM statuses WHERE department_id = :id AND report_date = :date");
-        $stmt->execute(['id' => $selected_department_id, 'date' => date('Y-m-d')]);
+        $stmt->execute(['id' => $selected_department_id, 'date' => $submission_date]);
         $fetched_status = $stmt->fetch();
         if ($fetched_status) $current_status = $fetched_status;
     }
@@ -114,6 +116,8 @@ $department_tree = build_tree($all_departments);
 // 5. Функция для рекурсивного отображения дерева сводки
 function display_summary_tree($nodes, &$grand_total, $level = 0) {
     foreach ($nodes as $node) {
+        $has_status = isset($node['present']); // Проверяем, есть ли данные о статусе
+
         $present = $node['present'] ?? 0; $on_duty = $node['on_duty'] ?? 0; $trip = $node['trip'] ?? 0;
         $vacation = $node['vacation'] ?? 0; $sick = $node['sick'] ?? 0; $other = $node['other'] ?? 0;
         $total = $present + $on_duty + $trip + $vacation + $sick + $other;
@@ -121,7 +125,10 @@ function display_summary_tree($nodes, &$grand_total, $level = 0) {
         $grand_total['total'] += $total; $grand_total['present'] += $present; $grand_total['on_duty'] += $on_duty;
         $grand_total['trip'] += $trip; $grand_total['vacation'] += $vacation; $grand_total['sick'] += $sick; $grand_total['other'] += $other;
 
-        echo '<tr>';
+        // Добавляем класс для подсветки, если данных нет
+        $row_class = !$has_status ? 'table-danger' : '';
+
+        echo '<tr class="' . $row_class . '">';
         echo '<td class="text-left align-middle">' . str_repeat('&mdash; ', $level) . htmlspecialchars($node['name']) . '</td>';
         echo '<td class="align-middle"><strong>' . $total . '</strong></td>';
         echo '<td class="align-middle">' . $present . '</td>';
@@ -146,15 +153,15 @@ function display_summary_tree($nodes, &$grand_total, $level = 0) {
 <!-- Блок для пользователей департаментов -->
 <?php if ($USER['role'] === 'department'): ?>
 <div class="card mb-4">
-    <div class="card-header"><h4>Ввод данных за сегодня (<?php echo date('d.m.Y'); ?>)</h4></div>
+    <div class="card-header"><h4>Ввод данных</h4></div>
     <div class="card-body">
         <?php if (empty($user_departments)): ?>
             <div class="alert alert-warning">Ваша учетная запись не привязана ни к одному департаменту.</div>
         <?php else: ?>
-            <!-- Форма выбора департамента -->
-            <form action="index.php" method="get" class="mb-3">
-                <div class="form-group">
-                    <label for="dep_id"><b>Выберите департамент для ввода данных:</b></label>
+            <!-- Форма выбора департамента и даты -->
+            <form action="index.php" method="get" class="mb-3 form-inline">
+                <div class="form-group mr-3">
+                    <label for="dep_id" class="mr-2"><b>Департамент:</b></label>
                     <select name="dep_id" id="dep_id" class="form-control" onchange="this.form.submit()">
                         <option value="">-- Выберите --</option>
                         <?php foreach ($user_departments as $dep): ?>
@@ -164,14 +171,19 @@ function display_summary_tree($nodes, &$grand_total, $level = 0) {
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <input type="hidden" name="view_date" value="<?php echo $view_date; ?>">
+                 <div class="form-group">
+                    <label for="submission_date" class="mr-2"><b>Дата:</b></label>
+                    <input type="date" id="submission_date" name="submission_date" class="form-control" value="<?php echo $submission_date; ?>" onchange="this.form.submit()">
+                </div>
             </form>
 
             <!-- Форма ввода данных (показывается, только если департамент выбран) -->
             <?php if ($selected_department_id): ?>
             <hr>
-            <form action="index.php?dep_id=<?php echo $selected_department_id; ?>&view_date=<?php echo $view_date; ?>" method="post">
+            <h5>Данные за <?php echo date('d.m.Y', strtotime($submission_date)); ?></h5>
+            <form action="index.php?dep_id=<?php echo $selected_department_id; ?>&submission_date=<?php echo $submission_date; ?>" method="post">
                 <input type="hidden" name="department_id" value="<?php echo $selected_department_id; ?>">
+                <input type="hidden" name="submission_date" value="<?php echo $submission_date; ?>">
                 <div class="form-row">
                     <div class="form-group col-md-2"><label>Присутствуют</label><input type="number" class="form-control" name="present" value="<?php echo $current_status['present']; ?>" required min="0"></div>
                     <div class="form-group col-md-2"><label>На дежурстве</label><input type="number" class="form-control" name="on_duty" value="<?php echo $current_status['on_duty']; ?>" required min="0"></div>

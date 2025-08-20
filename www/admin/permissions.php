@@ -95,7 +95,7 @@ if ($_SERVER["REQUEST_METHOD"] == "GET") {
 
             // Получаем связанные департаменты
             $stmt_perms = $pdo->prepare("SELECT department_id FROM user_department_permissions WHERE user_id = :user_id");
-            $stmt_perms->execute(['id' => $user_id]);
+            $stmt_perms->execute(['user_id' => $user_id]);
             $department_ids = $stmt_perms->fetchAll(PDO::FETCH_COLUMN);
         }
     }

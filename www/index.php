@@ -80,10 +80,41 @@ if ($USER['role'] === 'department') {
     // Получение данных для предзаполнения формы, если департамент выбран
     $current_status = ['present' => 0, 'on_duty' => 0, 'trip' => 0, 'vacation' => 0, 'sick' => 0, 'other' => 0, 'notes' => ''];
     if ($selected_department_id) {
-        $stmt = $pdo->prepare("SELECT * FROM statuses WHERE department_id = :id AND report_date = :date");
-        $stmt->execute(['id' => $selected_department_id, 'date' => $submission_date]);
-        $fetched_status = $stmt->fetch();
-        if ($fetched_status) $current_status = $fetched_status;
+        $load_from_date = $_GET['load_from_date'] ?? null;
+        $data_found = false;
+
+        // 1. Ручная загрузка по дате
+        if ($load_from_date) {
+            $stmt = $pdo->prepare("SELECT * FROM statuses WHERE department_id = :id AND report_date = :date");
+            $stmt->execute(['id' => $selected_department_id, 'date' => $load_from_date]);
+            $fetched_status = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($fetched_status) {
+                $current_status = $fetched_status;
+                $data_found = true;
+            }
+        }
+
+        // 2. Загрузка данных на выбранную дату подачи (если не было ручной загрузки)
+        if (!$data_found) {
+            $stmt = $pdo->prepare("SELECT * FROM statuses WHERE department_id = :id AND report_date = :date");
+            $stmt->execute(['id' => $selected_department_id, 'date' => $submission_date]);
+            $fetched_status = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($fetched_status) {
+                $current_status = $fetched_status;
+                $data_found = true;
+            }
+        }
+
+        // 3. Авто-загрузка за предыдущий день (если данных все еще нет)
+        if (!$data_found) {
+            $previous_day = date('Y-m-d', strtotime($submission_date . ' -1 day'));
+            $stmt = $pdo->prepare("SELECT * FROM statuses WHERE department_id = :id AND report_date = :date");
+            $stmt->execute(['id' => $selected_department_id, 'date' => $previous_day]);
+            $fetched_status = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($fetched_status) {
+                $current_status = $fetched_status; // Копируем все, включая заметки
+            }
+        }
     }
 }
 
@@ -180,8 +211,20 @@ function display_summary_tree($nodes, &$grand_total, $level = 0) {
             <!-- Форма ввода данных (показывается, только если департамент выбран) -->
             <?php if ($selected_department_id): ?>
             <hr>
-            <h5>Данные за <?php echo date('d.m.Y', strtotime($submission_date)); ?></h5>
-            <form action="index.php?dep_id=<?php echo $selected_department_id; ?>&submission_date=<?php echo $submission_date; ?>" method="post">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5>Данные за <?php echo date('d.m.Y', strtotime($submission_date)); ?></h5>
+                <form action="index.php" method="get" class="form-inline">
+                    <input type="hidden" name="dep_id" value="<?php echo $selected_department_id; ?>">
+                    <input type="hidden" name="submission_date" value="<?php echo $submission_date; ?>">
+                    <div class="form-group">
+                        <label for="load_from_date" class="mr-2">Загрузить данные за:</label>
+                        <input type="date" id="load_from_date" name="load_from_date" class="form-control form-control-sm" value="<?php echo date('Y-m-d'); ?>">
+                    </div>
+                    <button type="submit" class="btn btn-secondary btn-sm ml-2">Загрузить</button>
+                </form>
+            </div>
+
+            <form action="index.php?dep_id=<?php echo $selected_department_id; ?>&submission_date=<?php echo $submission_date; ?>" method="post" class="mt-3">
                 <input type="hidden" name="department_id" value="<?php echo $selected_department_id; ?>">
                 <input type="hidden" name="submission_date" value="<?php echo $submission_date; ?>">
                 <div class="form-row">

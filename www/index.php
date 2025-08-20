@@ -28,32 +28,49 @@ if ($USER['role'] === 'department') {
     // Обработка отправки формы
     if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_status'])) {
         $department_id_to_submit = (int)$_POST['department_id'];
+
+        // --- Сохраняем отправленные данные для предзаполнения формы в случае ошибки ---
+        $current_status = [
+            'present' => (int)$_POST['present'], 'on_duty' => (int)$_POST['on_duty'],
+            'trip' => (int)$_POST['trip'], 'vacation' => (int)$_POST['vacation'],
+            'sick' => (int)$_POST['sick'], 'other' => (int)$_POST['other'],
+            'notes' => trim($_POST['notes'])
+        ];
+
         // Проверяем, имеет ли пользователь право на отправку для этого департамента
         if (!in_array($department_id_to_submit, $USER['department_ids'])) {
             $error_message = "Ошибка: у вас нет прав на отправку данных для этого департамента.";
         } else {
-            $report_date_today = date('Y-m-d');
-            $status_values = [
-                'department_id' => $department_id_to_submit,
-                'report_date' => $report_date_today,
-                'present' => (int)$_POST['present'], 'on_duty' => (int)$_POST['on_duty'],
-                'trip' => (int)$_POST['trip'], 'vacation' => (int)$_POST['vacation'],
-                'sick' => (int)$_POST['sick'], 'other' => (int)$_POST['other'],
-                'notes' => trim($_POST['notes'])
-            ];
+            // --- Новая логика валидации ---
+            $stmt_dep_info = $pdo->prepare("SELECT number_of_employees FROM departments WHERE id = ?");
+            $stmt_dep_info->execute([$department_id_to_submit]);
+            $department_employees = $stmt_dep_info->fetchColumn();
 
-            try {
-                $sql = "INSERT INTO statuses (department_id, report_date, present, on_duty, trip, vacation, sick, other, notes)
-                        VALUES (:department_id, :report_date, :present, :on_duty, :trip, :vacation, :sick, :other, :notes)
-                        ON CONFLICT (department_id, report_date) DO UPDATE SET
-                        present = EXCLUDED.present, on_duty = EXCLUDED.on_duty, trip = EXCLUDED.trip,
-                        vacation = EXCLUDED.vacation, sick = EXCLUDED.sick, other = EXCLUDED.other, notes = EXCLUDED.notes";
-                $stmt = $pdo->prepare($sql);
-                $stmt->execute($status_values);
-                log_event("Отправлен/обновлен статус для департамента ID {$department_id_to_submit} за дату {$report_date_today}");
-                $success_message = "Данные для департамента успешно сохранены.";
-            } catch (PDOException $e) {
-                $error_message = "Ошибка сохранения данных: " . $e->getMessage();
+            $form_total = array_sum(array_intersect_key($current_status, array_flip(['present', 'on_duty', 'trip', 'vacation', 'sick', 'other'])));
+
+            if ($department_employees !== null && $form_total != $department_employees) {
+                $error_message = "Ошибка: Сумма по всем полям ({$form_total}) не совпадает с количеством сотрудников в подразделении ({$department_employees}). Пожалуйста, исправьте данные.";
+            } else {
+                // --- Если валидация прошла, сохраняем данные ---
+                try {
+                    $report_date_today = date('Y-m-d');
+                    $status_values = array_merge(
+                        ['department_id' => $department_id_to_submit, 'report_date' => $report_date_today],
+                        $current_status
+                    );
+
+                    $sql = "INSERT INTO statuses (department_id, report_date, present, on_duty, trip, vacation, sick, other, notes)
+                            VALUES (:department_id, :report_date, :present, :on_duty, :trip, :vacation, :sick, :other, :notes)
+                            ON CONFLICT (department_id, report_date) DO UPDATE SET
+                            present = EXCLUDED.present, on_duty = EXCLUDED.on_duty, trip = EXCLUDED.trip,
+                            vacation = EXCLUDED.vacation, sick = EXCLUDED.sick, other = EXCLUDED.other, notes = EXCLUDED.notes";
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->execute($status_values);
+                    log_event("Отправлен/обновлен статус для департамента ID {$department_id_to_submit} за дату {$report_date_today}");
+                    $success_message = "Данные для департамента успешно сохранены.";
+                } catch (PDOException $e) {
+                    $error_message = "Ошибка сохранения данных: " . $e->getMessage();
+                }
             }
         }
     }

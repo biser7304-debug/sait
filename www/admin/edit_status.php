@@ -16,7 +16,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_status'])) {
     $department_id = $_POST['department_id'];
     $report_date = $_POST['report_date'];
 
-    $status_values = [
+    $status_data = [
         'present' => (int)$_POST['present'],
         'on_duty' => (int)$_POST['on_duty'],
         'trip' => (int)$_POST['trip'],
@@ -26,33 +26,40 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_status'])) {
         'notes' => trim($_POST['notes'])
     ];
 
-    try {
-        // Используем INSERT ... ON CONFLICT для PostgreSQL (эквивалент ON DUPLICATE KEY UPDATE в MySQL)
-        $sql = "
-            INSERT INTO statuses (department_id, report_date, present, on_duty, trip, vacation, sick, other, notes)
-            VALUES (:department_id, :report_date, :present, :on_duty, :trip, :vacation, :sick, :other, :notes)
-            ON CONFLICT (department_id, report_date)
-            DO UPDATE SET
-                present = EXCLUDED.present,
-                on_duty = EXCLUDED.on_duty,
-                trip = EXCLUDED.trip,
-                vacation = EXCLUDED.vacation,
-                sick = EXCLUDED.sick,
-                other = EXCLUDED.other,
-                notes = EXCLUDED.notes
-        ";
+    // --- Логика валидации ---
+    $stmt_dep_info = $pdo->prepare("SELECT number_of_employees FROM departments WHERE id = ?");
+    $stmt_dep_info->execute([$department_id]);
+    $department_employees = $stmt_dep_info->fetchColumn();
 
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute(array_merge(
-            ['department_id' => $department_id, 'report_date' => $report_date],
-            $status_values
-        ));
+    $form_total = array_sum(array_intersect_key($status_data, array_flip(['present', 'on_duty', 'trip', 'vacation', 'sick', 'other'])));
 
-        log_event("Администратор отредактировал статус для департамента ID {$department_id} за дату {$report_date}");
-        $success_message = "Данные успешно сохранены.";
+    if ($department_employees !== null && $form_total != $department_employees) {
+        $error_message = "Ошибка: Сумма по всем полям ({$form_total}) не совпадает с количеством сотрудников в подразделении ({$department_employees}). Данные не сохранены.";
+    } else {
+        // --- Если валидация прошла, сохраняем ---
+        try {
+            $sql = "
+                INSERT INTO statuses (department_id, report_date, present, on_duty, trip, vacation, sick, other, notes)
+                VALUES (:department_id, :report_date, :present, :on_duty, :trip, :vacation, :sick, :other, :notes)
+                ON CONFLICT (department_id, report_date)
+                DO UPDATE SET
+                    present = EXCLUDED.present, on_duty = EXCLUDED.on_duty, trip = EXCLUDED.trip,
+                    vacation = EXCLUDED.vacation, sick = EXCLUDED.sick, other = EXCLUDED.other,
+                    notes = EXCLUDED.notes
+            ";
 
-    } catch (PDOException $e) {
-        $error_message = "Ошибка сохранения данных: " . $e->getMessage();
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute(array_merge(
+                ['department_id' => $department_id, 'report_date' => $report_date],
+                $status_data
+            ));
+
+            log_event("Администратор отредактировал статус для департамента ID {$department_id} за дату {$report_date}");
+            $success_message = "Данные успешно сохранены.";
+
+        } catch (PDOException $e) {
+            $error_message = "Ошибка сохранения данных: " . $e->getMessage();
+        }
     }
 }
 

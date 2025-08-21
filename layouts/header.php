@@ -1,6 +1,6 @@
 <?php
 // Централизованная проверка аутентификации и авторизации
-require_once '../includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 
 // Загрузка настроек приложения из базы данных
 // Объект $pdo доступен из config.php, который подключается через auth.php
@@ -57,9 +57,9 @@ $color_scheme = $app_settings['color_scheme'] ?? 'default';
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
     <div class="container">
-        <a class="navbar-brand" href="index.php">
+        <a class="navbar-brand" href="/index.php">
             <?php if (!empty($app_logo) && file_exists($app_logo)): ?>
-                <img src="<?php echo $app_logo; ?>?t=<?php echo filemtime($app_logo);?>" alt="logo">
+                <img src="/<?php echo ltrim($app_logo, '/'); ?>?t=<?php echo filemtime($app_logo);?>" alt="logo">
             <?php endif; ?>
             <?php echo htmlspecialchars($app_title); ?>
         </a>

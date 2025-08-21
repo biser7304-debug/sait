@@ -46,7 +46,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         'name' => $department_name, 'num' => $number_of_employees,
                         'parent_id' => $parent_id, 'sort_index' => $sort_index, 'id' => $department_id
                     ]);
-                    log_event("Обновлен департамент ID: {$department_id}");
+                    log_event("Администратор обновил департамент ID {$department_id}. Новые данные: Имя='{$department_name}', Сотрудники={$number_of_employees}, Родитель ID={$parent_id}, Сортировка={$sort_index}");
                     setcookie("success_message", "Департамент успешно обновлен.", time() + 5);
                 } else { // Создание
                     $sql = "INSERT INTO departments (name, number_of_employees, parent_id, sort_index) VALUES (:name, :num, :parent_id, :sort_index)";
@@ -56,7 +56,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         'parent_id' => $parent_id, 'sort_index' => $sort_index
                     ]);
                     $new_id = $pdo->lastInsertId();
-                    log_event("Создан новый департамент '{$department_name}' (ID: {$new_id})");
+                    log_event("Администратор создал новый департамент '{$department_name}' (ID: {$new_id}) со значениями: Сотрудники={$number_of_employees}, Родитель ID={$parent_id}, Сортировка={$sort_index}");
                     setcookie("success_message", "Департамент успешно создан.", time() + 5);
                 }
                 header("Location: departments.php");

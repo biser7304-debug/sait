@@ -46,7 +46,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_employees'])) {
                 $sql = "UPDATE departments SET number_of_employees = :num WHERE id = :id";
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute(['num' => $new_employee_count, 'id' => $department_id_to_update]);
-                log_event("Пользователь {$USER['username']} обновил количество сотрудников для департамента ID {$department_id_to_update}");
+                log_event("Пользователь {$USER['username']} обновил количество сотрудников для департамента ID {$department_id_to_update} на значение {$new_employee_count}");
                 $success_message = "Количество сотрудников успешно обновлено.";
 
                 // Обновляем данные в массиве для отображения

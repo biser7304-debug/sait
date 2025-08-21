@@ -70,7 +70,11 @@ $color_scheme = $app_settings['color_scheme'] ?? 'default';
             <ul class="navbar-nav mr-auto">
                 <?php if ($USER['role'] === 'admin'): ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="admin/departments.php">Панель администратора</a>
+                        <a class="nav-link" href="/admin/departments.php">Панель администратора</a>
+                    </li>
+                <?php elseif ($USER['role'] === 'department'): ?>
+                     <li class="nav-item">
+                        <a class="nav-link" href="/department/settings.php">Настройки подразделения</a>
                     </li>
                 <?php endif; ?>
             </ul>

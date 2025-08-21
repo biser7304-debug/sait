@@ -91,3 +91,45 @@ function display_tree($nodes, $level = 0) {
     }
 }
 
+/**
+ * Проверяет корректность значения количества сотрудников относительно родительского и дочерних подразделений.
+ *
+ * @param PDO $pdo Объект подключения к БД.
+ * @param int $department_id ID текущего редактируемого департамента (0 для нового).
+ * @param int|null $parent_id ID родительского департамента.
+ * @param int|null $number_of_employees Новое значение количества сотрудников.
+ * @return bool|string Возвращает true в случае успеха или строку с сообщением об ошибке.
+ */
+function validate_employee_count($pdo, $department_id, $parent_id, $number_of_employees) {
+    // 1. Проверка родителя: сумма детей не должна превышать количество в родителе
+    if ($parent_id) {
+        $stmt_parent = $pdo->prepare("SELECT name, number_of_employees FROM departments WHERE id = :id");
+        $stmt_parent->execute(['id' => $parent_id]);
+        $parent = $stmt_parent->fetch();
+
+        if ($parent && $parent['number_of_employees'] !== null) {
+            $stmt_children = $pdo->prepare("SELECT SUM(number_of_employees) FROM departments WHERE parent_id = :parent_id AND id != :current_id");
+            $stmt_children->execute(['parent_id' => $parent_id, 'current_id' => $department_id]);
+            $children_sum = (int)$stmt_children->fetchColumn();
+
+            $total_children_sum = $children_sum + (int)$number_of_employees;
+
+            if ($total_children_sum > (int)$parent['number_of_employees']) {
+                return "Ошибка валидации: Сумма сотрудников дочерних подразделений ({$total_children_sum}) не может превышать количество в родительском ('{$parent['name']}', {$parent['number_of_employees']}).";
+            }
+        }
+    }
+
+    // 2. Проверка текущего узла: его количество должно быть не меньше суммы его детей
+    if ($department_id) { // Только для существующих департаментов
+        $stmt_children_sum = $pdo->prepare("SELECT SUM(number_of_employees) FROM departments WHERE parent_id = :id");
+        $stmt_children_sum->execute(['id' => $department_id]);
+        $children_sum_for_current = (int)$stmt_children_sum->fetchColumn();
+
+        if ($number_of_employees !== null && $children_sum_for_current > (int)$number_of_employees) {
+            return "Ошибка валидации: Количество сотрудников ({$number_of_employees}) не может быть меньше суммы сотрудников в дочерних подразделениях ({$children_sum_for_current}).";
+        }
+    }
+
+    return true;
+}

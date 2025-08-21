@@ -21,44 +21,6 @@ if (isset($_COOKIE["success_message"])) {
 $all_departments_stmt = $pdo->query("SELECT id, name FROM departments ORDER BY sort_index ASC, name ASC");
 $all_departments = $all_departments_stmt->fetchAll();
 
-// --- Функция для валидации количества сотрудников ---
-function validate_employee_count($pdo, $department_id, $parent_id, $number_of_employees) {
-    // 1. Проверка родителя: сумма детей должна совпадать с количеством в родителе
-    if ($parent_id) {
-        // Получаем количество сотрудников у родителя
-        $stmt_parent = $pdo->prepare("SELECT name, number_of_employees FROM departments WHERE id = :id");
-        $stmt_parent->execute(['id' => $parent_id]);
-        $parent = $stmt_parent->fetch();
-
-        if ($parent && $parent['number_of_employees'] !== null) {
-            // Получаем сумму всех детей, включая текущий (даже если он еще не сохранен)
-            $stmt_children = $pdo->prepare("SELECT SUM(number_of_employees) FROM departments WHERE parent_id = :parent_id AND id != :current_id");
-            $stmt_children->execute(['parent_id' => $parent_id, 'current_id' => $department_id]);
-            $children_sum = (int)$stmt_children->fetchColumn();
-
-            $total_children_sum = $children_sum + (int)$number_of_employees;
-
-            if ($total_children_sum > (int)$parent['number_of_employees']) {
-                return "Ошибка валидации: Сумма сотрудников дочерних подразделений ({$total_children_sum}) не может превышать количество в родительском ('{$parent['name']}', {$parent['number_of_employees']}).";
-            }
-        }
-    }
-
-    // 2. Проверка текущего узла: его количество должно быть не меньше суммы его детей
-    if ($department_id) { // Только для существующих департаментов
-        $stmt_children_sum = $pdo->prepare("SELECT SUM(number_of_employees) FROM departments WHERE parent_id = :id");
-        $stmt_children_sum->execute(['id' => $department_id]);
-        $children_sum_for_current = (int)$stmt_children_sum->fetchColumn();
-
-        if ($number_of_employees !== null && $children_sum_for_current > (int)$number_of_employees) {
-            return "Ошибка валидации: Количество сотрудников ({$number_of_employees}) не может быть меньше суммы сотрудников в дочерних подразделениях ({$children_sum_for_current}).";
-        }
-    }
-
-    return true;
-}
-
-
 // --- Обработка POST-запросов ---
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $department_name = trim($_POST['name']);

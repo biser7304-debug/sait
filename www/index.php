@@ -189,19 +189,10 @@ function display_summary_tree($nodes, &$grand_total, $level = 0) {
             $grand_total['trip'] += $trip; $grand_total['vacation'] += $vacation; $grand_total['sick'] += $sick; $grand_total['other'] += $other;
         }
 
-        $tr_classes = [];
-        if (!$has_status) $tr_classes[] = 'table-danger';
-        if ($is_parent) $tr_classes[] = 'parent-row';
-        if ($node['parent_id']) $tr_classes[] = 'child-row';
+        $row_class = !$has_status ? 'class="table-danger"' : '';
 
-        $tr_attrs = 'class="' . implode(' ', $tr_classes) . '"';
-        if ($is_parent) $tr_attrs .= ' data-id="' . $node['id'] . '" style="cursor: pointer;"';
-        if ($node['parent_id']) $tr_attrs .= ' data-parent-id="' . $node['parent_id'] . '"';
-
-        echo '<tr ' . $tr_attrs . '>';
-        echo '<td class="text-left align-middle">' . str_repeat('&emsp;', $level);
-        if ($is_parent) echo '<i class="bi bi-plus-square-fill mr-2"></i>';
-        echo htmlspecialchars($node['name']) . '</td>';
+        echo '<tr ' . $row_class . '>';
+        echo '<td class="text-left align-middle">' . str_repeat('&emsp;', $level) . htmlspecialchars($node['name']) . '</td>';
         echo '<td class="align-middle"><strong>' . $total . '</strong></td>';
         echo '<td class="align-middle">' . $present . '</td>';
         echo '<td class="align-middle">' . $on_duty . '</td>';
@@ -219,11 +210,7 @@ function display_summary_tree($nodes, &$grand_total, $level = 0) {
 }
 ?>
 
-<style>
-    .child-row { display: none; }
-    .parent-row:hover { background-color: #f2f2f2; }
-    .parent-row i { color: #007bff; }
-</style>
+<?php if ($error_message): ?><div class="alert alert-danger"><?php echo $error_message; ?></div><?php endif; ?>
 
 <?php if ($error_message): ?><div class="alert alert-danger"><?php echo $error_message; ?></div><?php endif; ?>
 <?php if ($success_message): ?><div class="alert alert-success"><?php echo $success_message; ?></div><?php endif; ?>

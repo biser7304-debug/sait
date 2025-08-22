@@ -1,31 +1,44 @@
 <?php
-// Make sure this script is not run on a production server
-if (getenv('APP_ENV') === 'production') {
-    die("This script cannot be run in a production environment.");
-}
-
 header('Content-Type: text/plain; charset=utf-8');
-
-require_once 'config.php';
+require_once __DIR__ . '/../config.php';
 
 try {
-    echo "Starting database installation for PostgreSQL...\n\n";
+    echo "--- НАЧАЛО УСТАНОВКИ ТЕСТОВОЙ БД ---\n\n";
 
-    // SQL statements
-    $sql = "
-        CREATE TABLE IF NOT EXISTS departments (
+    // 1. Удаление старых таблиц в правильном порядке
+    echo "1. Удаление существующих таблиц...\n";
+    $pdo->exec("DROP TABLE IF EXISTS statuses CASCADE;");
+    $pdo->exec("DROP TABLE IF EXISTS user_department_permissions CASCADE;");
+    $pdo->exec("DROP TABLE IF EXISTS users CASCADE;");
+    $pdo->exec("DROP TABLE IF EXISTS departments CASCADE;");
+    $pdo->exec("DROP TABLE IF EXISTS logs CASCADE;");
+    $pdo->exec("DROP TABLE IF EXISTS settings CASCADE;");
+    echo "SUCCESS: Таблицы успешно удалены.\n\n";
+
+    // 2. Создание таблиц заново
+    echo "2. Создание структуры таблиц...\n";
+    $sql_create_tables = "
+        CREATE TABLE departments (
             id SERIAL PRIMARY KEY,
-            name VARCHAR(255) UNIQUE NOT NULL
+            name VARCHAR(255) UNIQUE NOT NULL,
+            number_of_employees INTEGER,
+            parent_id INTEGER REFERENCES departments(id) ON DELETE SET NULL,
+            sort_index INTEGER DEFAULT 0
         );
 
-        CREATE TABLE IF NOT EXISTS users (
+        CREATE TABLE users (
             id SERIAL PRIMARY KEY,
             username VARCHAR(100) UNIQUE NOT NULL,
-            role VARCHAR(50) NOT NULL CHECK (role IN ('admin', 'department')),
-            department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL
+            role VARCHAR(50) NOT NULL CHECK (role IN ('admin', 'department'))
         );
 
-        CREATE TABLE IF NOT EXISTS statuses (
+        CREATE TABLE user_department_permissions (
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+            PRIMARY KEY (user_id, department_id)
+        );
+
+        CREATE TABLE statuses (
             id SERIAL PRIMARY KEY,
             department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
             report_date DATE NOT NULL,
@@ -36,66 +49,77 @@ try {
             sick INTEGER NOT NULL DEFAULT 0,
             other INTEGER NOT NULL DEFAULT 0,
             notes TEXT,
+            is_admin_override BOOLEAN NOT NULL DEFAULT FALSE,
             UNIQUE (department_id, report_date)
         );
 
-        CREATE TABLE IF NOT EXISTS logs (
+        CREATE TABLE logs (
             id SERIAL PRIMARY KEY,
             log_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
             username VARCHAR(100),
             action TEXT NOT NULL
         );
 
-        CREATE TABLE IF NOT EXISTS settings (
+        CREATE TABLE settings (
             setting_key VARCHAR(50) PRIMARY KEY,
             setting_value TEXT
         );
     ";
+    $pdo->exec($sql_create_tables);
+    echo "SUCCESS: Структура таблиц успешно создана.\n\n";
 
-    // Execute the table creation
-    $pdo->exec($sql);
-    echo "SUCCESS: All tables created successfully or already exist.\n";
+    // 3. Наполнение данными
+    echo "3. Наполнение базы тестовыми данными...\n";
+    $pdo->beginTransaction();
 
-    // --- Insert Default Data ---
+    // --- Пользователи ---
+    $stmt_user = $pdo->prepare("INSERT INTO users (username, role) VALUES (?, ?)");
+    $stmt_user->execute(['as-biserov', 'admin']);
+    $stmt_user->execute(['aa-admin', 'department']);
+    $user_aa_admin_id = $pdo->lastInsertId();
+    echo "  - Пользователи 'as-biserov' (admin) и 'aa-admin' (department) созданы.\n";
 
-    // Add default admins
-    echo "\nProcessing default administrators...\n";
-    $admins = ['as-biserov', 'as-karpov'];
-    $stmt_admins = $pdo->prepare("INSERT INTO users (username, role) VALUES (:username, 'admin') ON CONFLICT (username) DO NOTHING");
+    // --- Подразделения ---
+    $stmt_dep = $pdo->prepare("INSERT INTO departments (name, number_of_employees, sort_index, parent_id) VALUES (?, ?, ?, ?)");
 
-    foreach ($admins as $admin) {
-        $stmt_admins->execute(['username' => $admin]);
-        if ($stmt_admins->rowCount() > 0) {
-            echo "  - Admin '{$admin}' created.\n";
-        } else {
-            echo "  - Admin '{$admin}' already exists.\n";
-        }
-    }
+    $stmt_dep->execute(['Центр', 100, 0, null]);
+    $center_id = $pdo->lastInsertId();
 
-    // Add default settings
-    echo "\nProcessing default settings...\n";
+    $stmt_dep->execute(['Офис 1', 60, 10, $center_id]);
+    $office1_id = $pdo->lastInsertId();
+
+    $stmt_dep->execute(['1 подразделение', 30, 11, $office1_id]);
+    $stmt_dep->execute(['2 подразделение', 20, 12, $office1_id]);
+    $stmt_dep->execute(['3 подразделение', 10, 13, $office1_id]);
+    echo "  - Структура подразделений создана.\n";
+
+    // --- Права доступа ---
+    $stmt_perm = $pdo->prepare("INSERT INTO user_department_permissions (user_id, department_id) VALUES (?, ?)");
+    $stmt_perm->execute([$user_aa_admin_id, $office1_id]);
+    echo "  - Пользователю 'aa-admin' предоставлены права на 'Офис 1'.\n";
+
+    // --- Настройки ---
     $settings = [
-        'app_title' => 'Учет Статуса Сотрудников',
+        'app_title' => 'Учет Статуса Сотрудников (ТЕСТ)',
         'app_logo' => '',
         'color_scheme' => 'default',
         'custom_colors' => '{}'
     ];
-    $stmt_settings = $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES (:key, :value) ON CONFLICT (setting_key) DO NOTHING");
-
+    $stmt_settings = $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES (:key, :value)");
     foreach ($settings as $key => $value) {
         $stmt_settings->execute(['key' => $key, 'value' => $value]);
-         if ($stmt_settings->rowCount() > 0) {
-            echo "  - Setting '{$key}' created.\n";
-        } else {
-            echo "  - Setting '{$key}' already exists.\n";
-        }
     }
+    echo "  - Базовые настройки применены.\n";
 
-    echo "\n--------------------------------------------------\n";
-    echo "SUCCESS: Database installation complete.\n";
-    echo "IMPORTANT: Please delete this file (install.php) from your server for security reasons.\n";
+    $pdo->commit();
+    echo "SUCCESS: Данные успешно добавлены.\n";
+
+    echo "\n--- УСТАНОВКА ТЕСТОВОЙ БД ЗАВЕРШЕНА ---\n";
 
 } catch (PDOException $e) {
-    die("DATABASE INSTALLATION FAILED: " . $e->getMessage());
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    die("ОШИБКА УСТАНОВКИ БАЗЫ ДАННЫХ: " . $e->getMessage());
 }
 ?>

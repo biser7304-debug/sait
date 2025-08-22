@@ -2,99 +2,84 @@
 error_reporting(E_ALL);
 ini_set("display_errors","On");
 
-//echo $_SERVER["PHP_AUTH_USER"];
-//$_SERVER["PHP_AUTH_USER"] = "mr-morozov";
+// Для отладки можно раскомментировать и задать имя пользователя
+//$_SERVER["PHP_AUTH_USER"] = "as-biserov";
+//$_SERVER["PHP_AUTH_USER"] = "aa-admin";
 
-//if (in_array($_SERVER['REMOTE_ADDR'], ["116.128.8.123", "116.128.8.24"]))
-//{
-//    $_SERVER["PHP_AUTH_USER"] = "mr-morozov";
-//}
-
-
-//echo $_SERVER["PHP_AUTH_USER"];
-
-
-
-// Start the session if not already started
-// if (session_status() === PHP_SESSION_NONE) {
-//     session_start();
-// }
-
-// --- Kerberos Authentication & User Parsing ---
-
-// For development/testing purposes, if PHP_AUTH_USER is not set by the server,
-// you can simulate it by uncommenting one of the lines below.
-// In a real production environment with Kerberos, this 'if' block can be removed.
-// if (!isset($_SERVER['PHP_AUTH_USER'])) {
-//     // To test as admin:
-//     // $_SERVER['PHP_AUTH_USER'] = 'as-biserov@domain.com';
-// 
-//     // To test as a regular user (assuming this user will be added to the DB with department rights):
-//     // $_SERVER['PHP_AUTH_USER'] = 'testuser@domain.com';
-// 
-//     // To test as an unauthorized user:
-//     // $_SERVER['PHP_AUTH_USER'] = 'unknown@domain.com';
-// 
-//     // If still not set, default to a known admin for development.
-//     if (!isset($_SERVER['PHP_AUTH_USER'])) {
-//         $_SERVER['PHP_AUTH_USER'] = 'as-karpov@domain.com';
-//     }
-// }
-
-// Get the full username (e.g., login@domain) provided by the web server
+// Получаем полное имя пользователя (например, login@domain), предоставленное веб-сервером
 $kerberos_user = $_SERVER['PHP_AUTH_USER'] ?? null;
 
 if (empty($kerberos_user)) {
-    // This case should ideally be handled by the web server configuration (e.g., Apache's AuthType Kerberos),
-    // which shouldn't allow access to the script without authentication. This is a fallback.
     header('HTTP/1.1 401 Unauthorized');
-    die('401 Unauthorized: Kerberos authentication is required to access this application.');
+    die('401 Не авторизован: для доступа к этому приложению требуется аутентификация Kerberos.');
 }
 
-// Parse the username to get the part before the '@' symbol
+// Парсим имя пользователя, чтобы получить часть перед символом '@'
 $username_parts = explode('@', $kerberos_user);
-$username = strtolower($username_parts[0]); // Use lowercase for consistency
+$username = strtolower($username_parts[0]);
 
-// --- Authorization & Session Management ---
-
-// Check if a session is already active and if the username matches.
-// This avoids hitting the database on every single page load for an already-authorized user.
-// if (isset($USER['loggedin']) && $USER['loggedin'] === true && isset($USER['username']) && $USER['username'] === $username) {
-//     // The user is already authenticated and authorized in this session.
-//     return;
-// }
-
-// If there's no active session for this user, we must query the database to get their role.
-// This code will run only once per session.
-require_once __DIR__ . '/../config.php'; // Ensure the $pdo object is available
+// Подключаем зависимости
+require_once __DIR__ . '/../config.php';
 require_once 'functions.php';
+
+/**
+ * Рекурсивно получает все ID дочерних подразделений для заданного ID родителя.
+ */
+function get_all_child_department_ids($pdo, $parent_id) {
+    $children_ids = [];
+    $stmt = $pdo->prepare("SELECT id FROM departments WHERE parent_id = :parent_id");
+    $stmt->execute(['parent_id' => $parent_id]);
+    $children = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    foreach ($children as $child_id) {
+        $children_ids[] = $child_id;
+        $children_ids = array_merge($children_ids, get_all_child_department_ids($pdo, $child_id));
+    }
+    return $children_ids;
+}
+
 try {
-    $stmt = $pdo->prepare("SELECT username, role, department_id FROM users WHERE username = :username");
+    $stmt = $pdo->prepare("SELECT id, username, role FROM users WHERE username = :username");
     $stmt->execute(['username' => $username]);
     $user_data = $stmt->fetch();
 
     if ($user_data) {
-        // User is found in our database. Authorize them by creating a session.
-        //session_regenerate_id(true); // Regenerate session ID to prevent session fixation attacks
-//  echo $_SERVER['PHP_AUTH_USER'] . " 6 username=" . $user_data['role'];
+        // Пользователь найден, устанавливаем основные данные.
         $USER['loggedin'] = true;
+        $USER['id'] = $user_data['id'];
         $USER['username'] = $user_data['username'];
         $USER['role'] = $user_data['role'];
-        $USER['department_id'] = $user_data['department_id'];
+        $USER['department_ids'] = []; // Инициализируем как пустой массив
+
+        // Если пользователь не администратор, получаем список его департаментов.
+        if ($user_data['role'] === 'department') {
+            // 1. Получаем явно назначенные права
+            $stmt_perms = $pdo->prepare("SELECT department_id FROM user_department_permissions WHERE user_id = :user_id");
+            $stmt_perms->execute(['user_id' => $user_data['id']]);
+            $explicit_ids = $stmt_perms->fetchAll(PDO::FETCH_COLUMN);
+
+            $all_accessible_ids = $explicit_ids;
+
+            // 2. Для каждого явного права рекурсивно получаем все дочерние
+            foreach ($explicit_ids as $dep_id) {
+                $child_ids = get_all_child_department_ids($pdo, $dep_id);
+                if (!empty($child_ids)) {
+                    $all_accessible_ids = array_merge($all_accessible_ids, $child_ids);
+                }
+            }
+
+            // 3. Сохраняем уникальные ID в сессию
+            $USER['department_ids'] = array_unique($all_accessible_ids);
+        }
 
     } else {
-        // The user is authenticated via Kerberos, but is not registered in our application's database.
-        // Therefore, they are not authorized to use the application.
-//         session_destroy(); // Clean up any partial session
         header('HTTP/1.1 403 Forbidden');
-        die('403 Forbidden: Your user account (' . htmlspecialchars($username) . ') is authenticated but not authorized to use this application. Please contact an administrator.');
+        die('403 Запрещено: Ваша учетная запись (' . htmlspecialchars($username) . ') аутентифицирована, но не авторизована для использования этого приложения. Пожалуйста, свяжитесь с администратором.');
     }
-   ;
 
 } catch (PDOException $e) {
-    // This would happen if the database is down or there's a query error.
-    //session_destroy();
     header('HTTP/1.1 500 Internal Server Error');
-    error_log("Authorization check failed: " . $e->getMessage()); // Log the actual error
-    die("A critical error occurred during the authorization check. Please try again later.");
+    error_log("Ошибка проверки авторизации: " . $e->getMessage());
+    die("Во время проверки авторизации произошла критическая ошибка. Пожалуйста, повторите попытку позже.");
 }
+?>

@@ -26,42 +26,60 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_status'])) {
         'notes' => trim($_POST['notes'])
     ];
 
-    try {
-        // Use INSERT ... ON CONFLICT for PostgreSQL (equivalent to MySQL's ON DUPLICATE KEY UPDATE)
-        $sql = "
-            INSERT INTO statuses (department_id, report_date, present, on_duty, trip, vacation, sick, other, notes)
-            VALUES (:department_id, :report_date, :present, :on_duty, :trip, :vacation, :sick, :other, :notes)
-            ON CONFLICT (department_id, report_date)
-            DO UPDATE SET
-                present = EXCLUDED.present,
-                on_duty = EXCLUDED.on_duty,
-                trip = EXCLUDED.trip,
-                vacation = EXCLUDED.vacation,
-                sick = EXCLUDED.sick,
-                other = EXCLUDED.other,
-                notes = EXCLUDED.notes
-        ";
+    // --- Validation Logic ---
+    $stmt_dep_info = $pdo->prepare("SELECT number_of_employees FROM departments WHERE id = ?");
+    $stmt_dep_info->execute([$department_id]);
+    $department_employees = $stmt_dep_info->fetchColumn();
 
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute(array_merge(
-            ['department_id' => $department_id, 'report_date' => $report_date],
-            $status_values
-        ));
+    $form_total = array_sum(array_intersect_key($status_values, array_flip(['present', 'on_duty', 'trip', 'vacation', 'sick', 'other'])));
 
-        log_event("Administrator edited status for department ID {$department_id} for date {$report_date}");
-        $success_message = "Data saved successfully.";
+    if ($department_employees !== null && $form_total != $department_employees) {
+        $error_message = "Ошибка: Сумма по всем полям ({$form_total}) не совпадает с количеством сотрудников в подразделении ({$department_employees}). Пожалуйста, исправьте данные.";
+    } else {
+        try {
+            // Use INSERT ... ON CONFLICT and set the admin override flag
+            $sql = "
+                INSERT INTO statuses (department_id, report_date, present, on_duty, trip, vacation, sick, other, notes, is_admin_override)
+                VALUES (:department_id, :report_date, :present, :on_duty, :trip, :vacation, :sick, :other, :notes, TRUE)
+                ON CONFLICT (department_id, report_date)
+                DO UPDATE SET
+                    present = EXCLUDED.present,
+                    on_duty = EXCLUDED.on_duty,
+                    trip = EXCLUDED.trip,
+                    vacation = EXCLUDED.vacation,
+                    sick = EXCLUDED.sick,
+                    other = EXCLUDED.other,
+                    notes = EXCLUDED.notes,
+                    is_admin_override = TRUE
+            ";
 
-    } catch (PDOException $e) {
-        $error_message = "Error saving data: " . $e->getMessage();
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute(array_merge(
+                ['department_id' => $department_id, 'report_date' => $report_date],
+                $status_values
+            ));
+
+            log_event("Administrator edited status for department ID {$department_id} for date {$report_date}");
+            $success_message = "Data saved successfully.";
+
+        } catch (PDOException $e) {
+            $error_message = "Error saving data: " . $e->getMessage();
+        }
     }
 }
 
 // Fetch data for the selected department and date to show in the form
 $status_data = null;
 if ($department_id) {
-    $stmt = $pdo->prepare("SELECT * FROM statuses WHERE department_id = :id AND report_date = :date");
-    $stmt->execute(['id' => $department_id, 'date' => $report_date]);
-    $status_data = $stmt->fetch();
+    // If there was a submission error, repopulate the form with the submitted data.
+    if ($_SERVER["REQUEST_METHOD"] == "POST" && $error_message) {
+        $status_data = $_POST;
+    } else {
+        // Otherwise, fetch the data from the database.
+        $stmt = $pdo->prepare("SELECT * FROM statuses WHERE department_id = :id AND report_date = :date");
+        $stmt->execute(['id' => $department_id, 'date' => $report_date]);
+        $status_data = $stmt->fetch();
+    }
 }
 
 // If no data exists for that day, initialize with defaults
@@ -73,8 +91,8 @@ if (!$status_data) {
 }
 ?>
 
-<h3>Edit Status Data</h3>
-<p>Select a department and date to load and edit the status information.</p>
+<h3>Редактирование данных о статусе</h3>
+<p>Выберите отдел и дату для загрузки и редактирования информации о состоянии.</p>
 
 <?php if ($error_message): ?><div class="alert alert-danger"><?php echo $error_message; ?></div><?php endif; ?>
 <?php if ($success_message): ?><div class="alert alert-success"><?php echo $success_message; ?></div><?php endif; ?>
@@ -84,9 +102,9 @@ if (!$status_data) {
     <div class="card-body">
         <form action="edit_status.php" method="get" class="form-inline">
             <div class="form-group mr-3">
-                <label for="department_id" class="mr-2">Department:</label>
+                <label for="department_id" class="mr-2">Департамент:</label>
                 <select name="department_id" id="department_id" class="form-control" required>
-                    <option value="">-- Select Department --</option>
+                    <option value="">-- Выберите департамент --</option>
                     <?php foreach ($departments as $dep): ?>
                         <option value="<?php echo $dep['id']; ?>" <?php echo ($department_id == $dep['id']) ? 'selected' : ''; ?>>
                             <?php echo htmlspecialchars($dep['name']); ?>
@@ -95,10 +113,10 @@ if (!$status_data) {
                 </select>
             </div>
             <div class="form-group mr-3">
-                <label for="report_date" class="mr-2">Date:</label>
+                <label for="report_date" class="mr-2">Дата:</label>
                 <input type="date" id="report_date" name="report_date" class="form-control" value="<?php echo $report_date; ?>" required>
             </div>
-            <button type="submit" class="btn btn-primary">Load Data</button>
+            <button type="submit" class="btn btn-primary">Загрузить данные</button>
         </form>
     </div>
 </div>
@@ -108,8 +126,8 @@ if (!$status_data) {
 <div class="card">
     <div class="card-header">
         <h4>
-            Editing data for "<?php echo htmlspecialchars(array_column($departments, 'name', 'id')[$department_id]); ?>"
-            for date <?php echo date('d.m.Y', strtotime($report_date)); ?>
+            Редактирование данных для "<?php echo htmlspecialchars(array_column($departments, 'name', 'id')[$department_id]); ?>"
+            за <?php echo date('d.m.Y', strtotime($report_date)); ?>
         </h4>
     </div>
     <div class="card-body">
@@ -118,19 +136,19 @@ if (!$status_data) {
             <input type="hidden" name="report_date" value="<?php echo $report_date; ?>">
 
             <div class="form-row">
-                <div class="form-group col-md-2"><label>Present</label><input type="number" class="form-control" name="present" value="<?php echo $status_data['present']; ?>" required min="0"></div>
-                <div class="form-group col-md-2"><label>On Duty</label><input type="number" class="form-control" name="on_duty" value="<?php echo $status_data['on_duty']; ?>" required min="0"></div>
-                <div class="form-group col-md-2"><label>Trip</label><input type="number" class="form-control" name="trip" value="<?php echo $status_data['trip']; ?>" required min="0"></div>
-                <div class="form-group col-md-2"><label>Vacation</label><input type="number" class="form-control" name="vacation" value="<?php echo $status_data['vacation']; ?>" required min="0"></div>
-                <div class="form-group col-md-2"><label>Sick</label><input type="number" class="form-control" name="sick" value="<?php echo $status_data['sick']; ?>" required min="0"></div>
-                <div class="form-group col-md-2"><label>Other</label><input type="number" class="form-control" name="other" value="<?php echo $status_data['other']; ?>" required min="0"></div>
+                <div class="form-group col-md-2"><label>Присутствуют</label><input type="number" class="form-control" name="present" value="<?php echo $status_data['present']; ?>" required min="0"></div>
+                <div class="form-group col-md-2"><label>На дежурстве</label><input type="number" class="form-control" name="on_duty" value="<?php echo $status_data['on_duty']; ?>" required min="0"></div>
+                <div class="form-group col-md-2"><label>В командировке</label><input type="number" class="form-control" name="trip" value="<?php echo $status_data['trip']; ?>" required min="0"></div>
+                <div class="form-group col-md-2"><label>В отпуске</label><input type="number" class="form-control" name="vacation" value="<?php echo $status_data['vacation']; ?>" required min="0"></div>
+                <div class="form-group col-md-2"><label>На больничном</label><input type="number" class="form-control" name="sick" value="<?php echo $status_data['sick']; ?>" required min="0"></div>
+                <div class="form-group col-md-2"><label>Прочее</label><input type="number" class="form-control" name="other" value="<?php echo $status_data['other']; ?>" required min="0"></div>
             </div>
             <div class="form-group">
-                <label for="notes">Notes</label>
+                <label for="notes">Примечания</label>
                 <textarea name="notes" class="form-control" rows="3"><?php echo htmlspecialchars($status_data['notes']); ?></textarea>
             </div>
-            <button type="submit" name="save_status" class="btn btn-success">Save Changes</button>
-            <a href="edit_status.php" class="btn btn-secondary">Clear Selection</a>
+            <button type="submit" name="save_status" class="btn btn-success">Сохранить изменения</button>
+            <a href="edit_status.php" class="btn btn-secondary">Отменить выбор</a>
         </form>
     </div>
 </div>

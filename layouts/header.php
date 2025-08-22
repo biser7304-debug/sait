@@ -1,9 +1,9 @@
 <?php
-// Централизованная проверка аутентификации и авторизации
-require_once __DIR__ . '/../includes/auth.php';
+// Centralized authentication and authorization check
+require_once '../includes/auth.php';
 
-// Загрузка настроек приложения из базы данных
-// Объект $pdo доступен из config.php, который подключается через auth.php
+// Load application settings from the database
+// The $pdo object is available from config.php, which is included by auth.php
 $app_settings = [];
 try {
     $stmt = $pdo->query("SELECT setting_key, setting_value FROM settings");
@@ -11,9 +11,9 @@ try {
         $app_settings[$row['setting_key']] = $row['setting_value'];
     }
 } catch (PDOException $e) {
-    error_log("Не удалось загрузить настройки из базы данных: " . $e->getMessage());
+    error_log("Could not load settings from database: " . $e->getMessage());
 }
-$app_title = $app_settings['app_title'] ?? 'Система учета сотрудников';
+$app_title = $app_settings['app_title'] ?? 'Staff Status Tracker';
 $app_logo = $app_settings['app_logo'] ?? '';
 $color_scheme = $app_settings['color_scheme'] ?? 'default';
 
@@ -48,7 +48,7 @@ $color_scheme = $app_settings['color_scheme'] ?? 'default';
     }
     ?>
     <style>
-        body { padding-bottom: 70px; /* Высота футера */ }
+        body { padding-bottom: 70px; /* Height of the footer */ }
         .footer { position: fixed; bottom: 0; width: 100%; height: 60px; line-height: 60px; background-color: #f5f5f5; }
         .navbar-brand img { max-height: 30px; margin-right: 10px; vertical-align: middle; }
     </style>
@@ -57,24 +57,20 @@ $color_scheme = $app_settings['color_scheme'] ?? 'default';
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
     <div class="container">
-        <a class="navbar-brand" href="/index.php">
+        <a class="navbar-brand" href="index.php">
             <?php if (!empty($app_logo) && file_exists($app_logo)): ?>
-                <img src="/<?php echo ltrim($app_logo, '/'); ?>?t=<?php echo filemtime($app_logo);?>" alt="logo">
+                <img src="<?php echo $app_logo; ?>?t=<?php echo filemtime($app_logo);?>" alt="logo">
             <?php endif; ?>
             <?php echo htmlspecialchars($app_title); ?>
         </a>
-        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Переключить навигацию">
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav mr-auto">
                 <?php if ($USER['role'] === 'admin'): ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="/admin/departments.php">Панель администратора</a>
-                    </li>
-                <?php elseif ($USER['role'] === 'department'): ?>
-                     <li class="nav-item">
-                        <a class="nav-link" href="/department/settings.php">Настройки подразделения</a>
+                        <a class="nav-link" href="admin/departments.php">Admin Panel</a>
                     </li>
                 <?php endif; ?>
             </ul>

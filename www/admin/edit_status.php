@@ -59,8 +59,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_status'])) {
                 $status_values
             ));
 
-            log_event("Administrator edited status for department ID {$department_id} for date {$report_date}");
-            $success_message = "Data saved successfully.";
+            log_event("Администратор изменил статус для департамента ID {$department_id} за дату {$report_date}");
+            $success_message = "Данные успешно сохранены.";
 
         } catch (PDOException $e) {
             $error_message = "Error saving data: " . $e->getMessage();

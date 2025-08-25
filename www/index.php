@@ -149,21 +149,27 @@ function calculate_tree_summary(&$nodes) {
     foreach ($nodes as &$node) {
         if (!empty($node['children'])) {
             calculate_tree_summary($node['children']);
+
+            // Если данные родителя введены администратором вручную, мы не рассчитываем их по дочерним элементам.
             if (empty($node['is_admin_override'])) {
-                $all_children_have_status = true;
+                $parent_has_any_data = false;
+                // Инициализируем статистику родителя нулями
                 foreach ($status_keys as $key) { $node[$key] = 0; }
                 $node['notes'] = '';
 
                 foreach ($node['children'] as $child) {
-                    if (!isset($child['present'])) {
-                        $all_children_have_status = false;
-                        break;
-                    }
-                    foreach ($status_keys as $key) {
-                        $node[$key] += $child[$key] ?? 0;
+                    // Проверяем, подал ли дочерний элемент данные
+                    if (isset($child['present'])) {
+                        $parent_has_any_data = true; // Отмечаем, что у нас есть хоть какие-то данные для отображения
+                        // Добавляем статистику дочернего элемента к общей сумме родителя
+                        foreach ($status_keys as $key) {
+                            $node[$key] += $child[$key] ?? 0;
+                        }
                     }
                 }
-                if (!$all_children_have_status) {
+
+                // Если ни один из дочерних элементов не подал данные, родитель также считается не имеющим данных.
+                if (!$parent_has_any_data) {
                      unset($node['present']);
                 }
             }

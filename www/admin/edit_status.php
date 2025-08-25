@@ -1,17 +1,17 @@
 <?php
 require_once '../../layouts/admin/header.php';
 
-// Initialize variables
+// Инициализация переменных
 $department_id = $_REQUEST['department_id'] ?? null;
 $report_date = $_REQUEST['report_date'] ?? date('Y-m-d');
 $error_message = '';
 $success_message = '';
 
-// Fetch all departments for the selector
+// Получение всех отделов для селектора
 $departments_stmt = $pdo->query("SELECT id, name FROM departments ORDER BY name");
 $departments = $departments_stmt->fetchAll();
 
-// Handle POST request to save status data
+// Обработка POST-запроса для сохранения данных о статусе
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_status'])) {
     $department_id = $_POST['department_id'];
     $report_date = $_POST['report_date'];
@@ -26,7 +26,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_status'])) {
         'notes' => trim($_POST['notes'])
     ];
 
-    // --- Validation Logic ---
+    // --- Логика валидации ---
     $stmt_dep_info = $pdo->prepare("SELECT number_of_employees FROM departments WHERE id = ?");
     $stmt_dep_info->execute([$department_id]);
     $department_employees = $stmt_dep_info->fetchColumn();
@@ -37,7 +37,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_status'])) {
         $error_message = "Ошибка: Сумма по всем полям ({$form_total}) не совпадает с количеством сотрудников в подразделении ({$department_employees}). Пожалуйста, исправьте данные.";
     } else {
         try {
-            // Use INSERT ... ON CONFLICT and set the admin override flag
+            // Используем INSERT ... ON CONFLICT и устанавливаем флаг перезаписи администратором
             $sql = "
                 INSERT INTO statuses (department_id, report_date, present, on_duty, trip, vacation, sick, other, notes, is_admin_override)
                 VALUES (:department_id, :report_date, :present, :on_duty, :trip, :vacation, :sick, :other, :notes, TRUE)
@@ -68,21 +68,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_status'])) {
     }
 }
 
-// Fetch data for the selected department and date to show in the form
+// Получение данных для выбранного отдела и даты для отображения в форме
 $status_data = null;
 if ($department_id) {
-    // If there was a submission error, repopulate the form with the submitted data.
+    // Если произошла ошибка отправки, повторно заполняем форму отправленными данными.
     if ($_SERVER["REQUEST_METHOD"] == "POST" && $error_message) {
         $status_data = $_POST;
     } else {
-        // Otherwise, fetch the data from the database.
+        // В противном случае, получаем данные из базы данных.
         $stmt = $pdo->prepare("SELECT * FROM statuses WHERE department_id = :id AND report_date = :date");
         $stmt->execute(['id' => $department_id, 'date' => $report_date]);
         $status_data = $stmt->fetch();
     }
 }
 
-// If no data exists for that day, initialize with defaults
+// Если на этот день нет данных, инициализируем значениями по умолчанию
 if (!$status_data) {
     $status_data = [
         'present' => 0, 'on_duty' => 0, 'trip' => 0,
@@ -97,7 +97,7 @@ if (!$status_data) {
 <?php if ($error_message): ?><div class="alert alert-danger"><?php echo $error_message; ?></div><?php endif; ?>
 <?php if ($success_message): ?><div class="alert alert-success"><?php echo $success_message; ?></div><?php endif; ?>
 
-<!-- Selection Form -->
+<!-- Форма выбора -->
 <div class="card mb-4">
     <div class="card-body">
         <form action="edit_status.php" method="get" class="form-inline">
@@ -121,7 +121,7 @@ if (!$status_data) {
     </div>
 </div>
 
-<!-- Edit Form (shown if a department is selected) -->
+<!-- Форма редактирования (отображается, если выбран отдел) -->
 <?php if ($department_id): ?>
 <div class="card">
     <div class="card-header">

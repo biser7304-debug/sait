@@ -3,7 +3,7 @@ error_reporting(E_ALL);
 ini_set("display_errors","On");
 
 // Для отладки можно раскомментировать и задать имя пользователя
-//$_SERVER["PHP_AUTH_USER"] = "as-biserov";
+$_SERVER["PHP_AUTH_USER"] = "as-biserov";
 //$_SERVER["PHP_AUTH_USER"] = "aa-admin";
 
 // Получаем полное имя пользователя (например, login@domain), предоставленное веб-сервером

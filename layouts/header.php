@@ -62,9 +62,15 @@ $color_scheme = $app_settings['color_scheme'] ?? 'default';
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container">
         <a class="navbar-brand" href="/index.php">
-            <?php if (!empty($app_logo) && file_exists('www' . $app_logo)): ?>
-                <img src="<?php echo $app_logo; ?>?t=<?php echo filemtime('www' . $app_logo);?>" alt="logo">
-            <?php endif; ?>
+            <?php
+            if (!empty($app_logo)) {
+                $logo_disk_path = dirname(__DIR__) . '/www/' . ltrim($app_logo, '/');
+                if (file_exists($logo_disk_path)) {
+                    $logo_web_path = '/' . ltrim($app_logo, '/');
+                    echo '<img src="' . $logo_web_path . '?t=' . filemtime($logo_disk_path) . '" alt="logo">';
+                }
+            }
+            ?>
             <?php echo htmlspecialchars($app_title); ?>
         </a>
         <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Переключить навигацию">

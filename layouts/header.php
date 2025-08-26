@@ -37,8 +37,9 @@ $color_scheme = $app_settings['color_scheme'] ?? 'default';
         </style>";
     } else {
         $scheme_css_path = "/css/schemes/{$color_scheme}.css";
-        if (file_exists('www' . $scheme_css_path)) {
-            echo '<link rel="stylesheet" href="' . $scheme_css_path . '?v=' . filemtime('www' . $scheme_css_path) . '">';
+        $scheme_disk_path = dirname(__DIR__) . '/www' . $scheme_css_path;
+        if (file_exists($scheme_disk_path)) {
+            echo '<link rel="stylesheet" href="' . $scheme_css_path . '?v=' . filemtime($scheme_disk_path) . '">';
         }
     }
     ?>

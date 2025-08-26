@@ -9,6 +9,12 @@ $selected_department_id = null;
 $user_departments = [];
 $submission_date = $_GET['submission_date'] ?? date('Y-m-d');
 
+// --- Логика для кнопок-стрелок ---
+$prev_view_date = date('Y-m-d', strtotime($view_date . ' -1 day'));
+$next_view_date = date('Y-m-d', strtotime($view_date . ' +1 day'));
+$prev_submission_date = date('Y-m-d', strtotime($submission_date . ' -1 day'));
+$next_submission_date = date('Y-m-d', strtotime($submission_date . ' +1 day'));
+
 if ($USER['role'] === 'department') {
     $current_status = ['present' => 0, 'on_duty' => 0, 'trip' => 0, 'vacation' => 0, 'sick' => 0, 'other' => 0, 'notes' => ''];
 
@@ -91,27 +97,14 @@ if ($USER['role'] === 'department') {
     }
 
     if ($selected_department_id && !isset($_POST['submit_status'])) {
-        $load_from_date = $_GET['load_from_date'] ?? null;
         $data_found = false;
 
-        if ($load_from_date) {
-            $stmt = $pdo->prepare("SELECT * FROM statuses WHERE department_id = :id AND report_date = :date");
-            $stmt->execute(['id' => $selected_department_id, 'date' => $load_from_date]);
-            $fetched_status = $stmt->fetch(PDO::FETCH_ASSOC);
-            if ($fetched_status) {
-                $current_status = $fetched_status;
-                $data_found = true;
-            }
-        }
-
-        if (!$data_found) {
-            $stmt = $pdo->prepare("SELECT * FROM statuses WHERE department_id = :id AND report_date = :date");
-            $stmt->execute(['id' => $selected_department_id, 'date' => $submission_date]);
-            $fetched_status = $stmt->fetch(PDO::FETCH_ASSOC);
-            if ($fetched_status) {
-                $current_status = $fetched_status;
-                $data_found = true;
-            }
+        $stmt = $pdo->prepare("SELECT * FROM statuses WHERE department_id = :id AND report_date = :date");
+        $stmt->execute(['id' => $selected_department_id, 'date' => $submission_date]);
+        $fetched_status = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($fetched_status) {
+            $current_status = $fetched_status;
+            $data_found = true;
         }
 
         if (!$data_found) {
@@ -240,9 +233,11 @@ function display_summary_tree($nodes, &$grand_total, $level = 0) {
                         <?php endforeach; ?>
                     </select>
                 </div>
-                 <div class="form-group">
+                 <div class="form-group d-flex align-items-center">
                     <label for="submission_date" class="mr-2"><b>Дата:</b></label>
+                    <a href="?dep_id=<?php echo $selected_department_id; ?>&submission_date=<?php echo $prev_submission_date; ?>" class="btn btn-sm btn-outline-secondary mr-1">&lt;</a>
                     <input type="date" id="submission_date" name="submission_date" class="form-control" value="<?php echo $submission_date; ?>" onchange="this.form.submit()">
+                    <a href="?dep_id=<?php echo $selected_department_id; ?>&submission_date=<?php echo $next_submission_date; ?>" class="btn btn-sm btn-outline-secondary ml-1">&gt;</a>
                 </div>
             </form>
 
@@ -250,15 +245,6 @@ function display_summary_tree($nodes, &$grand_total, $level = 0) {
             <hr>
             <div class="d-flex justify-content-between align-items-center">
                 <h5>Данные за <?php echo date('d.m.Y', strtotime($submission_date)); ?></h5>
-                <form action="index.php" method="get" class="form-inline">
-                    <input type="hidden" name="dep_id" value="<?php echo $selected_department_id; ?>">
-                    <input type="hidden" name="submission_date" value="<?php echo $submission_date; ?>">
-                    <div class="form-group">
-                        <label for="load_from_date" class="mr-2">Загрузить данные за:</label>
-                        <input type="date" id="load_from_date" name="load_from_date" class="form-control form-control-sm" value="<?php echo date('Y-m-d'); ?>">
-                    </div>
-                    <button type="submit" class="btn btn-secondary btn-sm ml-2">Загрузить</button>
-                </form>
             </div>
 
             <form action="index.php?dep_id=<?php echo $selected_department_id; ?>&submission_date=<?php echo $submission_date; ?>" method="post" class="mt-3">
@@ -291,11 +277,12 @@ function display_summary_tree($nodes, &$grand_total, $level = 0) {
         <div class="d-flex justify-content-between align-items-center">
             <h4>Сводка за <?php echo date('d.m.Y', strtotime($view_date)); ?></h4>
             <form action="index.php" method="get" class="form-inline">
-                <div class="form-group">
+                <div class="form-group d-flex align-items-center">
                     <label for="view_date" class="mr-2">Выберите дату:</label>
-                    <input type="date" id="view_date" name="view_date" class="form-control" value="<?php echo $view_date; ?>">
+                    <a href="?view_date=<?php echo $prev_view_date; ?>" class="btn btn-sm btn-outline-secondary mr-1">&lt;</a>
+                    <input type="date" id="view_date" name="view_date" class="form-control" value="<?php echo $view_date; ?>" onchange="this.form.submit()">
+                    <a href="?view_date=<?php echo $next_view_date; ?>" class="btn btn-sm btn-outline-secondary ml-1">&gt;</a>
                 </div>
-                <button type="submit" class="btn btn-secondary ml-2">Показать</button>
             </form>
         </div>
     </div>

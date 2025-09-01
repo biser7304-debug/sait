@@ -7,9 +7,10 @@ $report_date = $_REQUEST['report_date'] ?? date('Y-m-d');
 $error_message = '';
 $success_message = '';
 
-// Получение всех отделов для селектора
-$departments_stmt = $pdo->query("SELECT id, name FROM departments ORDER BY name");
-$departments = $departments_stmt->fetchAll();
+// Получение всех отделов и построение дерева для селектора
+$all_departments_stmt = $pdo->query("SELECT * FROM departments ORDER BY sort_index ASC, name ASC");
+$all_departments = $all_departments_stmt->fetchAll(PDO::FETCH_ASSOC);
+$department_tree = build_tree($all_departments);
 
 // Обработка POST-запроса для сохранения данных о статусе
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_status'])) {
@@ -105,11 +106,7 @@ if (!$status_data) {
                 <label for="department_id" class="mr-2">Департамент:</label>
                 <select name="department_id" id="department_id" class="form-control" required>
                     <option value="">-- Выберите департамент --</option>
-                    <?php foreach ($departments as $dep): ?>
-                        <option value="<?php echo $dep['id']; ?>" <?php echo ($department_id == $dep['id']) ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($dep['name']); ?>
-                        </option>
-                    <?php endforeach; ?>
+                    <?php display_department_options($department_tree, $department_id); ?>
                 </select>
             </div>
             <div class="form-group mr-3">
@@ -125,8 +122,18 @@ if (!$status_data) {
 <?php if ($department_id): ?>
 <div class="card">
     <div class="card-header">
+        <?php
+            // Находим имя выбранного департамента для заголовка
+            $selected_dep_name = '';
+            foreach ($all_departments as $dep) {
+                if ($dep['id'] == $department_id) {
+                    $selected_dep_name = $dep['name'];
+                    break;
+                }
+            }
+        ?>
         <h4>
-            Редактирование данных для "<?php echo htmlspecialchars(array_column($departments, 'name', 'id')[$department_id]); ?>"
+            Редактирование данных для "<?php echo htmlspecialchars($selected_dep_name); ?>"
             за <?php echo date('d.m.Y', strtotime($report_date)); ?>
         </h4>
     </div>

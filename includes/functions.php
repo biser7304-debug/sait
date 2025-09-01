@@ -128,4 +128,27 @@ function validate_employee_count($pdo, $department_id, $parent_id, $number_of_em
 
     return true;
 }
+
+/**
+ * Рекурсивно отображает иерархическое дерево в виде опций HTML для выпадающего списка.
+ *
+ * @param array $nodes Массив узлов дерева.
+ * @param mixed|null $selected_id ID текущего выбранного элемента.
+ * @param int $level Уровень вложенности для отступов.
+ */
+function display_department_options($nodes, $selected_id = null, $level = 0) {
+    foreach ($nodes as $node) {
+        // Используем неразрывные пробелы для отступов
+        $indent = str_repeat('&nbsp;&nbsp;&nbsp;', $level);
+        $selected_attr = ($node['id'] == $selected_id) ? 'selected' : '';
+
+        echo '<option value="' . $node['id'] . '" ' . $selected_attr . '>';
+        echo $indent . htmlspecialchars($node['name']);
+        echo '</option>';
+
+        if (isset($node['children'])) {
+            display_department_options($node['children'], $selected_id, $level + 1);
+        }
+    }
+}
 ?>

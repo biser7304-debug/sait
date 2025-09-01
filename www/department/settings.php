@@ -11,17 +11,21 @@ $error_message = '';
 $success_message = '';
 $number_of_employees = '';
 
-// Получаем все подразделения, к которым у пользователя есть доступ
-$user_departments = [];
+// 1. Получаем ВСЕ подразделения для построения полного дерева
+$all_deps_stmt = $pdo->query("SELECT id, name, number_of_employees, parent_id, sort_index FROM departments ORDER BY sort_index ASC, name ASC");
+$all_departments = $all_deps_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// 2. Строим полное дерево
+$department_tree_full = build_tree($all_departments);
+
+// 3. "Обрезаем" дерево, оставляя только разрешенные для пользователя узлы
+$user_department_tree = $department_tree_full;
 if (!empty($USER['department_ids'])) {
-    $in_placeholders = implode(',', array_fill(0, count($USER['department_ids']), '?'));
-    // Важно также получить parent_id для правильного построения дерева
-    $stmt = $pdo->prepare("SELECT id, name, number_of_employees, parent_id, sort_index FROM departments WHERE id IN ($in_placeholders) ORDER BY sort_index ASC, name ASC");
-    $stmt->execute($USER['department_ids']);
-    $user_departments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    prune_tree($user_department_tree, $USER['department_ids']);
+} else {
+    $user_department_tree = []; // Если нет доступных департаментов, дерево пустое
 }
-// Строим дерево только из доступных пользователю департаментов
-$department_tree = build_tree($user_departments);
+
 
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_employees'])) {
     $department_id_to_update = $_POST['department_id'];
@@ -45,7 +49,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_employees'])) {
                 log_event("Пользователь {$USER['username']} обновил количество сотрудников для департамента ID {$department_id_to_update} на значение {$new_employee_count}");
                 $success_message = "Количество сотрудников успешно обновлено.";
 
-                foreach ($user_departments as &$dep) {
+                // Обновляем данные в массиве для немедленного отображения
+                foreach ($all_departments as &$dep) {
                     if ($dep['id'] == $department_id_to_update) {
                         $dep['number_of_employees'] = $new_employee_count;
                         break;
@@ -61,7 +66,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_employees'])) {
 }
 
 if ($selected_department_id) {
-    foreach ($user_departments as $dep) {
+    // Получаем данные для выбранного отдела из полного списка
+    foreach ($all_departments as $dep) {
         if ($dep['id'] == $selected_department_id) {
             $number_of_employees = $dep['number_of_employees'];
             break;
@@ -77,7 +83,7 @@ if ($selected_department_id) {
     <?php if ($error_message): ?><div class="alert alert-danger"><?php echo $error_message; ?></div><?php endif; ?>
     <?php if ($success_message): ?><div class="alert alert-success"><?php echo $success_message; ?></div><?php endif; ?>
 
-    <?php if (empty($user_departments)): ?>
+    <?php if (empty($USER['department_ids'])): ?>
         <div class="alert alert-warning">За вашей учетной записью не закреплено ни одного подразделения.</div>
     <?php else: ?>
         <div class="card mb-4">
@@ -87,7 +93,7 @@ if ($selected_department_id) {
                         <label for="department_id" class="mr-2">Выберите подразделение для редактирования:</label>
                         <select name="department_id" id="department_id" class="form-control" onchange="this.form.submit()">
                             <option value="">-- Выберите --</option>
-                            <?php display_department_options($department_tree, [$selected_department_id]); ?>
+                            <?php display_department_options($user_department_tree, [$selected_department_id]); ?>
                         </select>
                     </div>
                 </form>

@@ -158,21 +158,4 @@ function display_department_options($nodes, $selected_ids = [], $level = 0, $exc
     }
 }
 
-/**
- * Рекурсивно "обрезает" дерево, оставляя только узлы с разрешенными ID.
- *
- * @param array $nodes Массив узлов (передается по ссылке).
- * @param array $allowed_ids Массив разрешенных ID.
- */
-function prune_tree(&$nodes, $allowed_ids) {
-    foreach ($nodes as $key => &$node) {
-        if (!in_array($node['id'], $allowed_ids)) {
-            unset($nodes[$key]);
-        } else {
-            if (isset($node['children'])) {
-                prune_tree($node['children'], $allowed_ids);
-            }
-        }
-    }
-}
 ?>

@@ -11,19 +11,36 @@ $error_message = '';
 $success_message = '';
 $number_of_employees = '';
 
-// 1. Получаем ВСЕ подразделения для построения полного дерева
-$all_deps_stmt = $pdo->query("SELECT id, name, number_of_employees, parent_id, sort_index FROM departments ORDER BY sort_index ASC, name ASC");
-$all_departments = $all_deps_stmt->fetchAll(PDO::FETCH_ASSOC);
+// --- Логика для построения иерархического списка доступных пользователю подразделений ---
 
-// 2. Строим полное дерево
-$department_tree_full = build_tree($all_departments);
+// 1. Получаем все подразделения, к которым у пользователя есть доступ.
+$user_departments = [];
+$user_department_ids = $USER['department_ids'] ?? [];
+if (!empty($user_department_ids)) {
+    $in_placeholders = implode(',', array_fill(0, count($user_department_ids), '?'));
+    $stmt = $pdo->prepare("SELECT id, name, number_of_employees, parent_id, sort_index FROM departments WHERE id IN ($in_placeholders) ORDER BY sort_index ASC, name ASC");
+    $stmt->execute($user_department_ids);
+    $user_departments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
 
-// 3. "Обрезаем" дерево, оставляя только разрешенные для пользователя узлы
-$user_department_tree = $department_tree_full;
-if (!empty($USER['department_ids'])) {
-    prune_tree($user_department_tree, $USER['department_ids']);
-} else {
-    $user_department_tree = []; // Если нет доступных департаментов, дерево пустое
+// 2. Находим "корни" доступных пользователю под-деревьев.
+// Это те подразделения, чей родитель либо null, либо не входит в список доступных.
+$user_tree_roots = [];
+foreach ($user_departments as $dep) {
+    if ($dep['parent_id'] === null || !in_array($dep['parent_id'], $user_department_ids)) {
+        $user_tree_roots[] = $dep;
+    }
+}
+
+// 3. Строим дерево, начиная с найденных корней.
+// Важно передавать в build_tree ВЕСЬ список доступных подразделений, чтобы функция могла находить дочерние элементы.
+$department_tree = [];
+foreach ($user_tree_roots as $root) {
+    $children = build_tree($user_departments, $root['id']);
+    if ($children) {
+        $root['children'] = $children;
+    }
+    $department_tree[] = $root;
 }
 
 
@@ -50,7 +67,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_employees'])) {
                 $success_message = "Количество сотрудников успешно обновлено.";
 
                 // Обновляем данные в массиве для немедленного отображения
-                foreach ($all_departments as &$dep) {
+                foreach ($user_departments as &$dep) {
                     if ($dep['id'] == $department_id_to_update) {
                         $dep['number_of_employees'] = $new_employee_count;
                         break;
@@ -66,8 +83,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_employees'])) {
 }
 
 if ($selected_department_id) {
-    // Получаем данные для выбранного отдела из полного списка
-    foreach ($all_departments as $dep) {
+    // Получаем данные для выбранного отдела из списка доступных пользователю
+    foreach ($user_departments as $dep) {
         if ($dep['id'] == $selected_department_id) {
             $number_of_employees = $dep['number_of_employees'];
             break;
@@ -93,7 +110,7 @@ if ($selected_department_id) {
                         <label for="department_id" class="mr-2">Выберите подразделение для редактирования:</label>
                         <select name="department_id" id="department_id" class="form-control" onchange="this.form.submit()">
                             <option value="">-- Выберите --</option>
-                            <?php display_department_options($user_department_tree, [$selected_department_id]); ?>
+                            <?php display_department_options($department_tree, [$selected_department_id]); ?>
                         </select>
                     </div>
                 </form>

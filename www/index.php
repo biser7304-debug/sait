@@ -146,6 +146,7 @@ function calculate_tree_summary(&$nodes) {
             // Если данные родителя введены администратором вручную, мы не рассчитываем их по дочерним элементам.
             if (empty($node['is_admin_override'])) {
                 $parent_has_any_data = false;
+                $all_children_submitted = true; // Предполагаем, что все дочерние элементы отправили данные
                 // Инициализируем статистику родителя нулями
                 foreach ($status_keys as $key) { $node[$key] = 0; }
                 $node['notes'] = '';
@@ -158,8 +159,14 @@ function calculate_tree_summary(&$nodes) {
                         foreach ($status_keys as $key) {
                             $node[$key] += $child[$key] ?? 0;
                         }
+                    } else {
+                        // Если хотя бы один дочерний элемент не подал данные, флаг становится false
+                        $all_children_submitted = false;
                     }
                 }
+
+                // Сохраняем флаг в узле для использования при отображении
+                $node['all_children_submitted'] = $all_children_submitted;
 
                 // Если ни один из дочерних элементов не подал данные, родитель также считается не имеющим данных.
                 if (!$parent_has_any_data) {
@@ -188,7 +195,16 @@ function display_summary_tree($nodes, &$grand_total, $level = 0) {
             $grand_total['trip'] += $trip; $grand_total['vacation'] += $vacation; $grand_total['sick'] += $sick; $grand_total['other'] += $other;
         }
 
-        $row_class = !$has_status ? 'class="table-danger"' : '';
+        $row_class = '';
+        if ($is_parent) {
+            // Для родителя строка красная, если не все дочерние узлы подали данные (и нет перезаписи админом)
+            if (empty($node['is_admin_override']) && empty($node['all_children_submitted'])) {
+                $row_class = 'class="table-danger"';
+            }
+        } elseif (!$has_status) {
+            // Для дочернего узла - если просто нет данных
+            $row_class = 'class="table-danger"';
+        }
 
         echo '<tr ' . $row_class . '>';
         echo '<td class="text-left align-middle">' . str_repeat('&emsp;', $level) . htmlspecialchars($node['name']) . '</td>';

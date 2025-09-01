@@ -17,9 +17,7 @@ if (isset($_COOKIE["success_message"])) {
    setcookie("success_message", "", time() - 3600);
 }
 
-// --- Получение всех департаментов для выпадающего списка ---
-$all_departments_stmt = $pdo->query("SELECT id, name FROM departments ORDER BY sort_index ASC, name ASC");
-$all_departments = $all_departments_stmt->fetchAll();
+// No change needed here, the main query is at the bottom
 
 // --- Обработка POST-запросов ---
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
@@ -110,10 +108,10 @@ if ($_SERVER["REQUEST_METHOD"] == "GET") {
     }
 }
 
-// --- Получение данных для дерева ---
-$stmt_all = $pdo->query("SELECT * FROM departments ORDER BY sort_index ASC, name ASC");
-$all_nodes = $stmt_all->fetchAll(PDO::FETCH_ASSOC);
-$department_tree = build_tree($all_nodes);
+// --- Получение данных для дерева и выпадающих списков ---
+$all_departments_stmt = $pdo->query("SELECT * FROM departments ORDER BY sort_index ASC, name ASC");
+$all_departments = $all_departments_stmt->fetchAll(PDO::FETCH_ASSOC);
+$department_tree = build_tree($all_departments);
 
 ?>
 
@@ -140,12 +138,10 @@ $department_tree = build_tree($all_nodes);
                 <label for="parent_id">Родительский департамент</label>
                 <select name="parent_id" id="parent_id" class="form-control">
                     <option value="">-- Нет --</option>
-                    <?php foreach ($all_departments as $dep): ?>
-                        <?php if ($update_mode && $dep['id'] == $department_id) continue; ?>
-                        <option value="<?php echo $dep['id']; ?>" <?php echo ($parent_id == $dep['id']) ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($dep['name']); ?>
-                        </option>
-                    <?php endforeach; ?>
+                    <?php
+                    // Четвертый параметр $department_id исключает текущий отдел из списка
+                    display_department_options($department_tree, [$parent_id], 0, $department_id);
+                    ?>
                 </select>
             </div>
 

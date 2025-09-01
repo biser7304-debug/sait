@@ -7,6 +7,10 @@ $report_date = $_REQUEST['report_date'] ?? date('Y-m-d');
 $error_message = '';
 $success_message = '';
 
+// --- Логика для кнопок-стрелок ---
+$prev_report_date = date('Y-m-d', strtotime($report_date . ' -1 day'));
+$next_report_date = date('Y-m-d', strtotime($report_date . ' +1 day'));
+
 // Получение всех отделов и построение дерева для селектора
 $all_departments_stmt = $pdo->query("SELECT * FROM departments ORDER BY sort_index ASC, name ASC");
 $all_departments = $all_departments_stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -106,12 +110,14 @@ if (!$status_data) {
                 <label for="department_id" class="mr-2">Департамент:</label>
                 <select name="department_id" id="department_id" class="form-control" required>
                     <option value="">-- Выберите департамент --</option>
-                    <?php display_department_options($department_tree, $department_id); ?>
+                    <?php display_department_options($department_tree, [$department_id]); ?>
                 </select>
             </div>
-            <div class="form-group mr-3">
+            <div class="form-group mr-3 d-flex align-items-center">
                 <label for="report_date" class="mr-2">Дата:</label>
-                <input type="date" id="report_date" name="report_date" class="form-control" value="<?php echo $report_date; ?>" required>
+                <a href="?department_id=<?php echo $department_id; ?>&report_date=<?php echo $prev_report_date; ?>" class="btn btn-sm btn-outline-secondary mr-1">&lt;</a>
+                <input type="date" id="report_date" name="report_date" class="form-control" value="<?php echo $report_date; ?>" required onchange="this.form.submit()">
+                <a href="?department_id=<?php echo $department_id; ?>&report_date=<?php echo $next_report_date; ?>" class="btn btn-sm btn-outline-secondary ml-1">&gt;</a>
             </div>
             <button type="submit" class="btn btn-primary">Загрузить данные</button>
         </form>

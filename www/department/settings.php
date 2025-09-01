@@ -11,13 +11,17 @@ $error_message = '';
 $success_message = '';
 $number_of_employees = '';
 
+// Получаем все подразделения, к которым у пользователя есть доступ
 $user_departments = [];
 if (!empty($USER['department_ids'])) {
     $in_placeholders = implode(',', array_fill(0, count($USER['department_ids']), '?'));
-    $stmt = $pdo->prepare("SELECT id, name, number_of_employees FROM departments WHERE id IN ($in_placeholders) ORDER BY sort_index ASC, name ASC");
+    // Важно также получить parent_id для правильного построения дерева
+    $stmt = $pdo->prepare("SELECT id, name, number_of_employees, parent_id, sort_index FROM departments WHERE id IN ($in_placeholders) ORDER BY sort_index ASC, name ASC");
     $stmt->execute($USER['department_ids']);
     $user_departments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+// Строим дерево только из доступных пользователю департаментов
+$department_tree = build_tree($user_departments);
 
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_employees'])) {
     $department_id_to_update = $_POST['department_id'];
@@ -83,11 +87,7 @@ if ($selected_department_id) {
                         <label for="department_id" class="mr-2">Выберите подразделение для редактирования:</label>
                         <select name="department_id" id="department_id" class="form-control" onchange="this.form.submit()">
                             <option value="">-- Выберите --</option>
-                            <?php foreach ($user_departments as $dep): ?>
-                                <option value="<?php echo $dep['id']; ?>" <?php echo ($selected_department_id == $dep['id']) ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($dep['name']); ?>
-                                </option>
-                            <?php endforeach; ?>
+                            <?php display_department_options($department_tree, [$selected_department_id]); ?>
                         </select>
                     </div>
                 </form>

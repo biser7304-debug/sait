@@ -13,9 +13,10 @@ $update_mode = false;
 $error_message = '';
 $success_message = '';
 
-// Получение всех департаментов для выпадающего списка
-$departments_stmt = $pdo->query("SELECT id, name FROM departments ORDER BY sort_index ASC, name ASC");
-$departments = $departments_stmt->fetchAll();
+// Получение всех департаментов и построение дерева для выпадающего списка
+$departments_stmt = $pdo->query("SELECT * FROM departments ORDER BY sort_index ASC, name ASC");
+$departments = $departments_stmt->fetchAll(PDO::FETCH_ASSOC);
+$department_tree = build_tree($departments);
 
 // --- Обработка POST-запросов ---
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
@@ -142,12 +143,8 @@ if ($_SERVER["REQUEST_METHOD"] == "GET") {
             </div>
             <div class="form-group mb-3" id="department-select-group" style="<?php echo ($role !== 'department') ? 'display: none;' : ''; ?>">
                 <label for="department_ids">Департаменты (удерживайте Ctrl/Cmd для выбора нескольких)</label>
-                <select name="department_ids[]" id="department_ids" class="form-control" multiple style="height: 150px;">
-                    <?php foreach ($departments as $dep): ?>
-                        <option value="<?php echo $dep['id']; ?>" <?php echo in_array($dep['id'], $department_ids) ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($dep['name']); ?>
-                        </option>
-                    <?php endforeach; ?>
+                <select name="department_ids[]" id="department_ids" class="form-control" multiple style="height: 250px;">
+                    <?php display_department_options($department_tree, $department_ids); ?>
                 </select>
             </div>
 

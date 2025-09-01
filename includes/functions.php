@@ -133,21 +133,27 @@ function validate_employee_count($pdo, $department_id, $parent_id, $number_of_em
  * Рекурсивно отображает иерархическое дерево в виде опций HTML для выпадающего списка.
  *
  * @param array $nodes Массив узлов дерева.
- * @param mixed|null $selected_id ID текущего выбранного элемента.
+ * @param array $nodes Массив узлов дерева.
+ * @param array $nodes Массив узлов дерева.
+ * @param array $selected_ids Массив ID текущих выбранных элементов.
  * @param int $level Уровень вложенности для отступов.
+ * @param int|null $exclude_id ID отдела, который нужно исключить из списка.
  */
-function display_department_options($nodes, $selected_id = null, $level = 0) {
+function display_department_options($nodes, $selected_ids = [], $level = 0, $exclude_id = null) {
     foreach ($nodes as $node) {
+        if ($node['id'] == $exclude_id) {
+            continue;
+        }
         // Используем неразрывные пробелы для отступов
         $indent = str_repeat('&nbsp;&nbsp;&nbsp;', $level);
-        $selected_attr = ($node['id'] == $selected_id) ? 'selected' : '';
+        $selected_attr = in_array($node['id'], $selected_ids) ? 'selected' : '';
 
         echo '<option value="' . $node['id'] . '" ' . $selected_attr . '>';
         echo $indent . htmlspecialchars($node['name']);
         echo '</option>';
 
         if (isset($node['children'])) {
-            display_department_options($node['children'], $selected_id, $level + 1);
+            display_department_options($node['children'], $selected_ids, $level + 1, $exclude_id);
         }
     }
 }

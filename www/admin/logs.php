@@ -1,5 +1,6 @@
 <?php
 require_once '../../layouts/admin/header.php';
+require_once '../../includes/functions.php';
 
 $error_message = '';
 $success_message = '';
@@ -152,6 +153,5 @@ $logs = $stmt->fetchAll();
 </div>
 
 <?php
-require_once '../../includes/functions.php';
 require_once '../../layouts/admin/footer.php';
 ?>

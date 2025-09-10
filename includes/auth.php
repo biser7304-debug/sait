@@ -11,7 +11,8 @@ $kerberos_user = $_SERVER['PHP_AUTH_USER'] ?? null;
 
 if (empty($kerberos_user)) {
     header('HTTP/1.1 401 Unauthorized');
-    die('401 Не авторизован: для доступа к этому приложению требуется аутентификация Kerberos.');
+    require_once __DIR__ . '/../layouts/auth_required.php';
+    exit();
 }
 
 // Парсим имя пользователя, чтобы получить часть перед символом '@'

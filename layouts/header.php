@@ -56,6 +56,12 @@ $color_scheme = $app_settings['color_scheme'] ?? 'default';
             background-color: #f5f5f5;
         }
         .navbar-brand img { max-height: 30px; margin-right: 10px; vertical-align: middle; }
+        .department-name-cell {
+            max-width: 250px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
     </style>
 </head>
 <body>

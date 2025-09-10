@@ -207,7 +207,10 @@ function display_summary_tree($nodes, &$grand_total, $level = 0) {
         }
 
         echo '<tr ' . $row_class . '>';
-        echo '<td class="text-left align-middle">' . str_repeat('&emsp;', $level) . htmlspecialchars($node['name']) . '</td>';
+        $indent_px = $level * 20;
+        echo '<td class="text-left align-middle department-name-cell" style="padding-left: ' . $indent_px . 'px;" title="' . htmlspecialchars($node['name']) . '">';
+        echo htmlspecialchars($node['name']);
+        echo '</td>';
         echo '<td class="align-middle"><strong>' . $total . '</strong></td>';
         echo '<td class="align-middle">' . $present . '</td>';
         echo '<td class="align-middle">' . $on_duty . '</td>';

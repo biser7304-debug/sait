@@ -181,7 +181,7 @@ if ($_SERVER["REQUEST_METHOD"] == "GET") {
                     LEFT JOIN user_department_permissions udp ON u.id = udp.user_id
                     LEFT JOIN departments d ON udp.department_id = d.id
                     GROUP BY u.id, u.username, u.role
-                    ORDER BY u.username
+                    ORDER BY department_names ASC, u.username ASC
                 ";
                 $stmt = $pdo->query($sql);
                 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) { ?>
